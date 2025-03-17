@@ -65,13 +65,19 @@ func RespondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	response, err := json.Marshal(payload)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"status":500,"message":"Failed to marshal JSON response"}`))
+		w.Write([]byte(`{"status":500,"message":"Failed to marshal JSON response"}`))
 		return
 	}
 
+	// Clear any previous content
+	w.Header().Del("Content-Type")
+
+	// Set headers correctly
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	_, _ = w.Write(response)
+
+	// Write the response body
+	w.Write(response)
 }
 
 // CreateReadCloser creates an io.ReadCloser from a struct for re-reading request bodies

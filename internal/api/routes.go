@@ -46,7 +46,7 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 	// CORS configuration
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
@@ -66,9 +66,6 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 		// Reservation endpoint
 		r.With(custommw.ValidateReservationRequest(logger)).
 			Post("/reserve", reservationHandler.Reserve)
-		// Release endpoint
-		r.With(custommw.ValidateReleaseRequest(logger)).
-			Post("/release", releaseHandler.Release)
 		// Commit endpoint
 		r.With(custommw.ValidateCommitRequest(logger)).
 			Post("/commit", commitHandler.Commit)
@@ -83,7 +80,9 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 			}
 			utils.RespondWithJSON(w, http.StatusOK, reservations)
 		})
-
+		// Release endpoint - must be registered correctly
+		r.With(custommw.ValidateReleaseRequest(logger)).
+			Post("/release", releaseHandler.Release)
 		// Delete a reservation (for admin use)
 		r.Delete("/reservations/{id}", func(w http.ResponseWriter, r *http.Request) {
 			id := chi.URLParam(r, "id")

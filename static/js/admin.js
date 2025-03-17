@@ -69,6 +69,7 @@ function improveClickResponsiveness() {
             btn.setAttribute('role', 'button');
         }
     });
+
     
     // Add debug click handler to document to help diagnose click issues
     document.addEventListener('click', function(e) {
@@ -301,24 +302,57 @@ function initializeApp() {
         this.classList.remove('is-invalid');
     });
 
-    // Action handlers (commit and delete) using event delegation
-    document.addEventListener('click', function(e) {
-        // Commit button clicked
-        if (e.target.classList.contains('commit-btn') || e.target.closest('.commit-btn')) {
-            const button = e.target.classList.contains('commit-btn') ? e.target : e.target.closest('.commit-btn');
-            const reservationId = button.dataset.id;
-            if (reservationId) {
-                console.log('Commit clicked for:', reservationId);
-                commitReservation(reservationId);
-            } else {
-                console.error('Missing reservationId for commit button');
-            }
+// Action handlers (commit and delete) using event delegation
+document.addEventListener('click', function(e) {
+    // Commit button clicked
+    if (e.target.classList.contains('commit-btn') || e.target.closest('.commit-btn')) {
+        const button = e.target.classList.contains('commit-btn') ? e.target : e.target.closest('.commit-btn');
+        const reservationId = button.dataset.id;
+        if (reservationId) {
+            console.log('Commit clicked for:', reservationId);
+            commitReservation(reservationId);
+        } else {
+            console.error('Missing reservationId for commit button');
+        }
+    }
+    
+    // Release button clicked
+    if (e.target.classList.contains('release-btn') || e.target.closest('.release-btn')) {
+        const button = e.target.classList.contains('release-btn') ? e.target : e.target.closest('.release-btn');
+        const reservationId = button.dataset.id;
+        const serverName = button.dataset.name;
+        
+        if (!reservationId || !serverName) {
+            console.error('Missing required data attributes:', button);
+            showAlert('Error: Missing reservation data', 'danger');
+            return;
         }
         
-        // Delete button clicked
-        if (e.target.classList.contains('delete-btn') || e.target.closest('.delete-btn')) {
-            // Get the button element (might be the icon inside the button)
-            const button = e.target.classList.contains('delete-btn') ? e.target : e.target.closest('.delete-btn');
+        console.log('Release button clicked for:', reservationId, serverName);
+        
+        // Set up confirmation modal for release
+        const message = `Are you sure you want to release "${serverName}" from committed status? This will change its status back to reserved.`;
+        
+        document.getElementById('confirmMessage').innerHTML = message;
+        document.getElementById('nameConfirmationSection').classList.add('d-none');
+        
+        document.getElementById('confirmAction').className = 'btn btn-warning';
+        document.getElementById('confirmAction').textContent = 'Release';
+        
+        const confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
+        confirmModalAction = () => {
+            console.log('Confirming release of:', reservationId);
+            releaseReservation(reservationId);
+            return true; // Allow modal to close
+        };
+        
+        confirmModal.show();
+    }
+    
+    // Delete button clicked
+    if (e.target.classList.contains('delete-btn') || e.target.closest('.delete-btn')) {
+        // Get the button element (might be the icon inside the button)
+        const button = e.target.classList.contains('delete-btn') ? e.target : e.target.closest('.delete-btn');
             
             const reservationId = button.dataset.id;
             const serverName = button.dataset.name;
@@ -960,10 +994,6 @@ function showAlert(message, type) {
 function releaseReservation(reservationId) {
     console.log('Releasing reservation:', reservationId);
     
-    // Show a loading indicator
-    document.getElementById('confirmAction').innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Releasing...';
-    document.getElementById('confirmAction').disabled = true;
-    
     fetch('/api/release', {
         method: 'POST',
         headers: {
@@ -974,41 +1004,35 @@ function releaseReservation(reservationId) {
     .then(response => {
         console.log('Release response status:', response.status);
         
-        if (!response.ok) {
-            return response.json().then(err => { 
-                throw new Error(err.message || 'Failed to release reservation'); 
-            });
-        }
-        return response.json();
+        // Clone the response and look at the raw content
+        return response.clone().text().then(rawText => {
+            console.log('Raw response:', rawText);
+            
+            if (!response.ok) {
+                try {
+                    return response.json().then(err => { 
+                        throw new Error(err.message || 'Failed to release reservation'); 
+                    });
+                } catch (e) {
+                    throw new Error(`Failed to parse response: ${rawText}`);
+                }
+            }
+            
+            try {
+                return response.json();
+            } catch (e) {
+                throw new Error(`Invalid JSON in response: ${rawText}`);
+            }
+        });
     })
     .then(data => {
         console.log('Release success:', data);
         showAlert('Reservation released successfully', 'success');
-        
-        // Close the modal
-        try {
-            const confirmModal = bootstrap.Modal.getInstance(document.getElementById('confirmModal'));
-            if (confirmModal) {
-                confirmModal.hide();
-            }
-        } catch (e) {
-            console.error('Error closing modal:', e);
-        }
-        
-        // Reset modal button
-        document.getElementById('confirmAction').innerHTML = 'Release';
-        document.getElementById('confirmAction').disabled = false;
-        
-        // Refresh data
         loadReservations();
         loadDashboardData();
     })
     .catch(error => {
         console.error('Release error:', error);
         showAlert(error.message, 'danger');
-        
-        // Reset modal button
-        document.getElementById('confirmAction').innerHTML = 'Release';
-        document.getElementById('confirmAction').disabled = false;
     });
 }

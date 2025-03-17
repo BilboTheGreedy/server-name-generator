@@ -25,6 +25,14 @@ func NewReleaseHandler(nameService *services.NameGeneratorService, logger *utils
 
 // Release handles POST /release requests
 func (h *ReleaseHandler) Release(w http.ResponseWriter, r *http.Request) {
+	// Add debug logging
+	h.logger.Info("Release handler called", "path", r.URL.Path, "method", r.Method)
+
+	// Log the request headers
+	for name, values := range r.Header {
+		h.logger.Info("Request header", "name", name, "value", values)
+	}
+
 	// Decode request body
 	var payload models.ReleasePayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -32,6 +40,9 @@ func (h *ReleaseHandler) Release(w http.ResponseWriter, r *http.Request) {
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request payload")
 		return
 	}
+
+	// Log the payload
+	h.logger.Info("Release payload", "reservationId", payload.ReservationID)
 
 	// Validate payload
 	if err := utils.Validate(payload); err != nil {
