@@ -15,21 +15,6 @@ const (
 	StatusCommitted = "committed"
 )
 
-// ReservationPayload represents the incoming data for a reservation request
-type ReservationPayload struct {
-	UnitCode    string `json:"unitCode"`    // Max 3 chars
-	Type        string `json:"type"`        // Max 1 char
-	Provider    string `json:"provider"`    // Max 1 char
-	Region      string `json:"region"`      // Max 4 chars
-	Environment string `json:"environment"` // Max 1 char
-	Function    string `json:"function"`    // Max 2 chars
-}
-
-// CommitPayload represents the incoming data for a commit request
-type CommitPayload struct {
-	ReservationID string `json:"reservationId" validate:"required,uuid"`
-}
-
 // Reservation represents a server name reservation in the database
 type Reservation struct {
 	ID          string    `json:"id"`

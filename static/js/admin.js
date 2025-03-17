@@ -216,14 +216,15 @@ function initializeApp() {
         }, 50);
     });
     document.addEventListener('click', function(e) {
-        // Release button clicked
-        if (e.target.classList.contains('release-btn') || e.target.closest('.release-btn')) {
-            const button = e.target.classList.contains('release-btn') ? e.target : e.target.closest('.release-btn');
-            const reservationId = button.dataset.id;
-            const serverName = button.dataset.name;
+        // Find if we clicked on or within a release button
+        const releaseBtn = e.target.closest('.release-btn');
+        if (releaseBtn) {
+            e.preventDefault();
+            const reservationId = releaseBtn.dataset.id;
+            const serverName = releaseBtn.dataset.name;
             
             if (!reservationId || !serverName) {
-                console.error('Missing required data attributes:', button);
+                console.error('Missing required data attributes:', releaseBtn);
                 showAlert('Error: Missing reservation data', 'danger');
                 return;
             }
@@ -236,16 +237,20 @@ function initializeApp() {
             document.getElementById('confirmMessage').innerHTML = message;
             document.getElementById('nameConfirmationSection').classList.add('d-none');
             
-            document.getElementById('confirmAction').className = 'btn btn-warning';
-            document.getElementById('confirmAction').textContent = 'Release';
+            // Update confirmation button style and text
+            const confirmActionBtn = document.getElementById('confirmAction');
+            confirmActionBtn.className = 'btn btn-warning';
+            confirmActionBtn.textContent = 'Release';
             
-            const confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
+            // Set up the confirmation action
             confirmModalAction = () => {
                 console.log('Confirming release of:', reservationId);
                 releaseReservation(reservationId);
                 return true; // Allow modal to close
             };
             
+            // Show the modal
+            const confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
             confirmModal.show();
         }
     });
@@ -285,14 +290,13 @@ function initializeApp() {
                 const success = confirmModalAction();
                 console.log('Confirm action result:', success);
                 
-                // Always close modal and handle any failures separately
-                const confirmModal = bootstrap.Modal.getInstance(document.getElementById('confirmModal'));
-                if (confirmModal) {
-                    confirmModal.hide();
-                }
+                // Always force cleanup, regardless of result
+                setTimeout(forceCleanupModal, 300);
+                
             } catch (error) {
                 console.error('Error in confirmModalAction:', error);
                 showAlert('Error processing your request: ' + error.message, 'danger');
+                setTimeout(forceCleanupModal, 300);
             }
         }
     });
@@ -354,62 +358,65 @@ document.addEventListener('click', function(e) {
         // Get the button element (might be the icon inside the button)
         const button = e.target.classList.contains('delete-btn') ? e.target : e.target.closest('.delete-btn');
             
-            const reservationId = button.dataset.id;
-            const serverName = button.dataset.name;
-            
-            if (!reservationId || !serverName) {
-                console.error('Missing required data attributes:', button);
-                showAlert('Error: Missing reservation data', 'danger');
-                return;
-            }
-            
-            console.log('Delete clicked for:', reservationId, serverName);
-            
-            const isCommitted = button.closest('tr').querySelector('.badge').textContent.trim() === 'Committed';
-            
-            // Store server name for validation
-            serverNameToDelete = serverName;
-            
-            // Set up confirmation modal with appropriate warning
-            let message = `Are you sure you want to delete the reservation for "${serverName}"?`;
-            
-            if (isCommitted) {
-                message = `WARNING: "${serverName}" is COMMITTED. Deleting this reservation could cause conflicts if the server name is already in use.`;
-                
-                // Show name confirmation section for committed reservations
-                document.getElementById('nameConfirmationSection').classList.remove('d-none');
-                document.getElementById('confirmServerName').value = '';
-                document.getElementById('confirmServerName').classList.remove('is-invalid');
-            } else {
-                // Hide name confirmation for non-committed reservations
-                document.getElementById('nameConfirmationSection').classList.add('d-none');
-            }
-            
-            document.getElementById('confirmMessage').innerHTML = message;
-            
-            document.getElementById('confirmAction').classList.add('btn-danger');
-            document.getElementById('confirmAction').textContent = 'Delete';
-            
-            const confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
-            confirmModalAction = () => {
-                console.log('Confirming deletion of:', reservationId);
-                
-                // For committed reservations, verify the name matches
-                if (isCommitted) {
-                    const enteredName = document.getElementById('confirmServerName').value;
-                    if (enteredName !== serverName) {
-                        document.getElementById('confirmServerName').classList.add('is-invalid');
-                        return false; // Prevent modal from closing
-                    }
-                }
-                
-                // If validation passes, delete the reservation
-                deleteReservation(reservationId);
-                return true; // Allow modal to close
-            };
-            
-            confirmModal.show();
+        const reservationId = button.dataset.id;
+        const serverName = button.dataset.name;
+        
+        if (!reservationId || !serverName) {
+            console.error('Missing required data attributes:', button);
+            showAlert('Error: Missing reservation data', 'danger');
+            return;
         }
+        
+        console.log('Delete clicked for:', reservationId, serverName);
+        
+        const isCommitted = button.closest('tr').querySelector('.badge').textContent.trim() === 'Committed';
+        
+        // Store server name for validation
+        serverNameToDelete = serverName;
+        
+        // Set up confirmation modal with appropriate warning
+        let message = `Are you sure you want to delete the reservation for "${serverName}"?`;
+        
+        if (isCommitted) {
+            message = `WARNING: "${serverName}" is COMMITTED. Deleting this reservation could cause conflicts if the server name is already in use.`;
+            
+            // Show name confirmation section for committed reservations
+            document.getElementById('nameConfirmationSection').classList.remove('d-none');
+            document.getElementById('confirmServerName').value = '';
+            document.getElementById('confirmServerName').classList.remove('is-invalid');
+        } else {
+            // Hide name confirmation for non-committed reservations
+            document.getElementById('nameConfirmationSection').classList.add('d-none');
+        }
+        
+        document.getElementById('confirmMessage').innerHTML = message;
+        
+        document.getElementById('confirmAction').className = 'btn btn-danger';
+        document.getElementById('confirmAction').textContent = 'Delete';
+        
+        const confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
+        confirmModalAction = () => {
+            console.log('Confirming deletion of:', reservationId);
+            
+            // For committed reservations, verify the name matches
+            if (isCommitted) {
+                const enteredName = document.getElementById('confirmServerName').value;
+                if (enteredName !== serverName) {
+                    document.getElementById('confirmServerName').classList.add('is-invalid');
+                    return false; // Prevent modal from closing
+                }
+            }
+            
+            // Close the modal immediately
+            confirmModal.hide();
+            
+            // If validation passes, delete the reservation
+            deleteReservation(reservationId);
+            return true; // Allow modal to close
+        };
+        
+        confirmModal.show();
+    }
     });
     
     // Call improveClickResponsiveness to make sure it's applied after initialization
@@ -990,9 +997,12 @@ function showAlert(message, type) {
 }
 
 
-// Function to release a reservation
 function releaseReservation(reservationId) {
     console.log('Releasing reservation:', reservationId);
+    
+    // Get the modal instance before doing anything else
+    const modalElement = document.getElementById('confirmModal');
+    const confirmModal = bootstrap.Modal.getInstance(modalElement);
     
     fetch('/api/release', {
         method: 'POST',
@@ -1002,37 +1012,74 @@ function releaseReservation(reservationId) {
         body: JSON.stringify({ reservationId })
     })
     .then(response => {
-        console.log('Release response status:', response.status);
+        // Force-close the modal before processing the response
+        if (confirmModal) {
+            confirmModal.hide();
+        }
         
-        // Clone the response and look at the raw content
-        return response.clone().text().then(rawText => {
-            console.log('Raw response:', rawText);
-            
-            if (!response.ok) {
-                try {
-                    return response.json().then(err => { 
-                        throw new Error(err.message || 'Failed to release reservation'); 
-                    });
-                } catch (e) {
-                    throw new Error(`Failed to parse response: ${rawText}`);
+        // Make sure to clean up any leftover backdrop
+        document.body.classList.remove('modal-open');
+        const backdrop = document.querySelector('.modal-backdrop');
+        if (backdrop) {
+            backdrop.remove();
+        }
+        
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.message || `Failed to release reservation. Status: ${response.status}`);
+            }).catch(err => {
+                // Handle non-JSON error responses
+                if (err instanceof SyntaxError) {
+                    throw new Error(`Failed to release reservation. Status: ${response.status}`);
                 }
-            }
-            
-            try {
-                return response.json();
-            } catch (e) {
-                throw new Error(`Invalid JSON in response: ${rawText}`);
-            }
-        });
+                throw err;
+            });
+        }
+        return response.json();
     })
     .then(data => {
         console.log('Release success:', data);
         showAlert('Reservation released successfully', 'success');
-        loadReservations();
-        loadDashboardData();
+        loadReservations(); // Refresh the reservations list
+        loadDashboardData(); // Refresh dashboard data
     })
     .catch(error => {
         console.error('Release error:', error);
         showAlert(error.message, 'danger');
+        
+        // Ensure any lingering modal elements are removed
+        document.body.classList.remove('modal-open');
+        const backdrop = document.querySelector('.modal-backdrop');
+        if (backdrop) {
+            backdrop.remove();
+        }
     });
 }
+
+
+function forceCleanupModal() {
+    // Remove the modal-open class from body
+    document.body.classList.remove('modal-open');
+    
+    // Remove any modal backdrop elements
+    const backdrop = document.querySelector('.modal-backdrop');
+    if (backdrop) {
+        backdrop.remove();
+    }
+    
+    // Reset any inline styles added by Bootstrap
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+}
+
+// Add this code to ensure modal cleanup on any hide event
+document.addEventListener('DOMContentLoaded', function() {
+    const confirmModal = document.getElementById('confirmModal');
+    
+    if (confirmModal) {
+        confirmModal.addEventListener('hidden.bs.modal', function() {
+            console.log('Modal hidden event triggered');
+            setTimeout(forceCleanupModal, 100);
+        });
+    }
+});
