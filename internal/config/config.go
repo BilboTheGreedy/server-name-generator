@@ -21,11 +21,18 @@ type DatabaseConfig struct {
 	Timeout  time.Duration
 }
 
+// AuthConfig holds authentication configuration
+type AuthConfig struct {
+	JWTSecret     string
+	TokenDuration time.Duration
+}
+
 // Config holds all configuration for the application
 type Config struct {
 	Port     int
 	LogLevel string
 	Database DatabaseConfig
+	Auth     AuthConfig
 }
 
 // Load reads configuration from environment variables
@@ -57,6 +64,20 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid DB_TIMEOUT: %w", err)
 	}
 
+	// Authentication configuration
+	jwtSecret := getEnv("JWT_SECRET", "")
+	if jwtSecret == "" {
+		// For development only - in production, this should be required
+		jwtSecret = "server-name-generator-development-secret-key"
+		fmt.Println("WARNING: Using default JWT secret. Set JWT_SECRET environment variable for production.")
+	}
+
+	tokenDurationStr := getEnv("TOKEN_DURATION", "24h")
+	tokenDuration, err := time.ParseDuration(tokenDurationStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid TOKEN_DURATION: %w", err)
+	}
+
 	return &Config{
 		Port:     port,
 		LogLevel: logLevel,
@@ -69,6 +90,10 @@ func Load() (*Config, error) {
 			SSLMode:  getEnv("DB_SSL_MODE", "disable"),
 			MaxConns: dbMaxConns,
 			Timeout:  dbTimeout,
+		},
+		Auth: AuthConfig{
+			JWTSecret:     jwtSecret,
+			TokenDuration: tokenDuration,
 		},
 	}, nil
 }
