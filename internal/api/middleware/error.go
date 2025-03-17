@@ -2,11 +2,12 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"runtime/debug"
 	"time"
 
-	"github.com/bilbothegreedy/server-name-generator/internal/errors"
+	apperrors "github.com/bilbothegreedy/server-name-generator/internal/errors"
 	"github.com/bilbothegreedy/server-name-generator/internal/utils"
 )
 
@@ -41,7 +42,7 @@ func ErrorHandler(logger *utils.Logger) func(http.Handler) http.Handler {
 					}
 
 					// Create application error
-					appErr := errors.NewInternalError("Server error", nil).
+					appErr := apperrors.NewInternalError("Server error", nil).
 						WithDetail(errorMsg)
 
 					// Add request ID if present
@@ -50,7 +51,7 @@ func ErrorHandler(logger *utils.Logger) func(http.Handler) http.Handler {
 					}
 
 					// Respond with error
-					utils.RespondWithError(w, ctx, appErr)
+					utils.RespondWithAppError(w, ctx, appErr)
 				}
 			}()
 
@@ -60,6 +61,7 @@ func ErrorHandler(logger *utils.Logger) func(http.Handler) http.Handler {
 	}
 }
 
+// RequestLogger logs each request and its response
 func RequestLogger(logger *utils.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

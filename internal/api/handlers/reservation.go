@@ -34,7 +34,7 @@ func (h *ReservationHandler) Reserve(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		h.logger.LogError(ctx, err, "Failed to decode request body")
 		appErr := errors.NewBadRequestError("Invalid request payload", err)
-		utils.RespondWithError(w, ctx, appErr)
+		utils.RespondWithAppError(w, ctx, appErr)
 		return
 	}
 
@@ -42,7 +42,7 @@ func (h *ReservationHandler) Reserve(w http.ResponseWriter, r *http.Request) {
 	if err := utils.Validate(payload); err != nil {
 		h.logger.LogError(ctx, err, "Invalid reservation payload")
 		appErr := errors.NewValidationError(err.Error(), err)
-		utils.RespondWithError(w, ctx, appErr)
+		utils.RespondWithAppError(w, ctx, appErr)
 		return
 	}
 
@@ -59,7 +59,7 @@ func (h *ReservationHandler) Reserve(w http.ResponseWriter, r *http.Request) {
 			appErr = errors.NewInternalError("Failed to reserve server name", err)
 		}
 
-		utils.RespondWithError(w, ctx, appErr)
+		utils.RespondWithAppError(w, ctx, appErr)
 		return
 	}
 

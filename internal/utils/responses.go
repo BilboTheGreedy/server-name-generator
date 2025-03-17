@@ -14,7 +14,7 @@ import (
 	"time"
 
 	apperrors "github.com/bilbothegreedy/server-name-generator/internal/errors"
-	"github.com/go-playground/validator/v10"
+	"github.com/go-playground/validator"
 )
 
 // Common errors
@@ -67,7 +67,7 @@ type SuccessResponse struct {
 }
 
 // RespondWithError sends an error response to the client
-// Keep the original function for backward compatibility
+// RespondWithError sends an error response to the client
 func RespondWithError(w http.ResponseWriter, code int, message string) {
 	RespondWithJSON(w, code, ErrorResponse{
 		Status:  code,
@@ -95,13 +95,13 @@ func RespondWithAppError(w http.ResponseWriter, ctx context.Context, err error) 
 		statusCode = http.StatusInternalServerError
 		response = ErrorResponse{
 			Status:  statusCode,
-			Message: "An unexpected error occurred",
+			Message: err.Error(),
 		}
+	}
 
-		// Add request ID if present in context
-		if requestID, ok := ctx.Value(RequestIDKey).(string); ok {
-			response.RequestID = requestID
-		}
+	// Add request ID from context if present
+	if requestID, ok := ctx.Value(RequestIDKey).(string); ok && response.RequestID == "" {
+		response.RequestID = requestID
 	}
 
 	// Send the response
