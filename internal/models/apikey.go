@@ -20,7 +20,7 @@ type APIKey struct {
 	Scopes      []string   `json:"scopes"`
 	LastUsed    *time.Time `json:"lastUsed,omitempty"` // Pointer to handle NULL values
 	CreatedAt   time.Time  `json:"createdAt"`
-	ExpiresAt   *time.Time `json:"expiresAt,omitempty"` // Pointer to handle NULL values
+	ExpiresAt   time.Time  `json:"expiresAt,omitempty"` // Changed to non-pointer to fix our issue
 	IsActive    bool       `json:"isActive"`
 }
 
@@ -71,6 +71,14 @@ func (m *APIKeyModel) Create(ctx context.Context, tx *sql.Tx, apiKey *APIKey) er
 		}
 	}
 
+	// Check if ExpiresAt is zero value, make it NULL in the database if so
+	var expiresAtParam interface{}
+	if apiKey.ExpiresAt.IsZero() {
+		expiresAtParam = nil
+	} else {
+		expiresAtParam = apiKey.ExpiresAt
+	}
+
 	_, err = tx.ExecContext(
 		ctx,
 		query,
@@ -81,7 +89,7 @@ func (m *APIKeyModel) Create(ctx context.Context, tx *sql.Tx, apiKey *APIKey) er
 		apiKey.Description,
 		scopesStr,
 		apiKey.CreatedAt,
-		apiKey.ExpiresAt,
+		expiresAtParam,
 		apiKey.IsActive,
 	)
 
@@ -135,7 +143,7 @@ func (m *APIKeyModel) GetByID(ctx context.Context, id string) (*APIKey, error) {
 
 	// Set ExpiresAt only if the database value is not NULL
 	if expiresAt.Valid {
-		apiKey.ExpiresAt = &expiresAt.Time
+		apiKey.ExpiresAt = expiresAt.Time
 	}
 
 	return apiKey, nil
@@ -184,7 +192,7 @@ func (m *APIKeyModel) GetByKey(ctx context.Context, key string) (*APIKey, error)
 
 	// Set ExpiresAt only if the database value is not NULL
 	if expiresAt.Valid {
-		apiKey.ExpiresAt = &expiresAt.Time
+		apiKey.ExpiresAt = expiresAt.Time
 	}
 
 	// Update last used timestamp
@@ -249,7 +257,7 @@ func (m *APIKeyModel) GetByUserID(ctx context.Context, userID string) ([]*APIKey
 
 		// Set ExpiresAt only if the database value is not NULL
 		if expiresAt.Valid {
-			apiKey.ExpiresAt = &expiresAt.Time
+			apiKey.ExpiresAt = expiresAt.Time
 		}
 
 		apiKeys = append(apiKeys, apiKey)
@@ -309,7 +317,7 @@ func (m *APIKeyModel) GetAll(ctx context.Context) ([]*APIKey, error) {
 
 		// Set ExpiresAt only if the database value is not NULL
 		if expiresAt.Valid {
-			apiKey.ExpiresAt = &expiresAt.Time
+			apiKey.ExpiresAt = expiresAt.Time
 		}
 
 		apiKeys = append(apiKeys, apiKey)
