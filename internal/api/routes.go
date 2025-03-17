@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -29,6 +30,7 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 	// Initialize handlers
 	reservationHandler := handlers.NewReservationHandler(nameService, logger)
 	commitHandler := handlers.NewCommitHandler(nameService, logger)
+	releaseHandler := handlers.NewReleaseHandler(nameService, logger)
 
 	// Create router
 	r := chi.NewRouter()
@@ -64,7 +66,9 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 		// Reservation endpoint
 		r.With(custommw.ValidateReservationRequest(logger)).
 			Post("/reserve", reservationHandler.Reserve)
-
+		// Release endpoint
+		r.With(custommw.ValidateReleaseRequest(logger)).
+			Post("/release", releaseHandler.Release)
 		// Commit endpoint
 		r.With(custommw.ValidateCommitRequest(logger)).
 			Post("/commit", commitHandler.Commit)
@@ -84,17 +88,30 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 		r.Delete("/reservations/{id}", func(w http.ResponseWriter, r *http.Request) {
 			id := chi.URLParam(r, "id")
 			if id == "" {
+				logger.Error("Missing reservation ID in delete request", "path", r.URL.Path)
 				utils.RespondWithError(w, http.StatusBadRequest, "Missing reservation ID")
 				return
 			}
 
+			logger.Info("Attempting to delete reservation", "id", id)
+
 			err := nameService.DeleteReservation(r.Context(), id)
 			if err != nil {
-				logger.Error("Failed to delete reservation", "error", err)
+				logger.Error("Failed to delete reservation", "error", err, "id", id)
+
+				// Check for not found errors
+				if strings.Contains(err.Error(), "not found") {
+					utils.RespondWithError(w, http.StatusNotFound, "Reservation not found")
+					return
+				}
+
 				utils.RespondWithError(w, http.StatusInternalServerError, "Failed to delete reservation: "+err.Error())
 				return
 			}
 
+			logger.Info("Reservation deleted successfully", "id", id)
+
+			// Return success response
 			utils.RespondWithJSON(w, http.StatusOK, map[string]string{
 				"message": "Reservation deleted successfully",
 			})

@@ -18,7 +18,79 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
         document.addEventListener('templatesLoaded', initializeApp);
     }
+    
+    // Improve click responsiveness
+    improveClickResponsiveness();
 });
+
+/**
+ * Improves button click responsiveness by making sure events bubble properly
+ * and adding pointer cursor styles
+ */
+function improveClickResponsiveness() {
+    // Apply better cursor style
+    const style = document.createElement('style');
+    style.textContent = `
+        .btn, button, [role="button"] {
+            cursor: pointer !important;
+        }
+        
+        /* Improve button hover state */
+        .btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+            transition: all 0.2s;
+        }
+        
+        /* Make sure delete and commit buttons are more obviously clickable */
+        .delete-btn, .commit-btn {
+            min-width: 38px;
+            min-height: 38px;
+            display: inline-flex !important;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        
+        .delete-btn:hover, .commit-btn:hover {
+            transform: scale(1.1);
+        }
+        
+        /* Better styling for alert container */
+        #alertContainer {
+            z-index: 9999 !important;
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // Ensure all buttons have proper role
+    document.querySelectorAll('button, .btn').forEach(btn => {
+        if (!btn.getAttribute('role')) {
+            btn.setAttribute('role', 'button');
+        }
+    });
+    
+    // Add debug click handler to document to help diagnose click issues
+    document.addEventListener('click', function(e) {
+        // Log only when a button or specific element is clicked
+        if (e.target.tagName === 'BUTTON' || 
+            e.target.classList.contains('btn') || 
+            e.target.classList.contains('delete-btn') ||
+            e.target.classList.contains('commit-btn') ||
+            e.target.closest('.delete-btn') ||
+            e.target.closest('.commit-btn')) {
+                
+            console.log('Element clicked:', e.target);
+            
+            // Highlight the clicked element temporarily
+            const originalBackground = e.target.style.background;
+            e.target.style.background = 'rgba(0, 123, 255, 0.2)';
+            setTimeout(() => {
+                e.target.style.background = originalBackground;
+            }, 300);
+        }
+    });
+}
 
 // Initialize the app
 function initializeApp() {
@@ -142,7 +214,40 @@ function initializeApp() {
             });
         }, 50);
     });
-
+    document.addEventListener('click', function(e) {
+        // Release button clicked
+        if (e.target.classList.contains('release-btn') || e.target.closest('.release-btn')) {
+            const button = e.target.classList.contains('release-btn') ? e.target : e.target.closest('.release-btn');
+            const reservationId = button.dataset.id;
+            const serverName = button.dataset.name;
+            
+            if (!reservationId || !serverName) {
+                console.error('Missing required data attributes:', button);
+                showAlert('Error: Missing reservation data', 'danger');
+                return;
+            }
+            
+            console.log('Release button clicked for:', reservationId, serverName);
+            
+            // Set up confirmation modal for release
+            const message = `Are you sure you want to release "${serverName}" from committed status? This will change its status back to reserved.`;
+            
+            document.getElementById('confirmMessage').innerHTML = message;
+            document.getElementById('nameConfirmationSection').classList.add('d-none');
+            
+            document.getElementById('confirmAction').className = 'btn btn-warning';
+            document.getElementById('confirmAction').textContent = 'Release';
+            
+            const confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
+            confirmModalAction = () => {
+                console.log('Confirming release of:', reservationId);
+                releaseReservation(reservationId);
+                return true; // Allow modal to close
+            };
+            
+            confirmModal.show();
+        }
+    });
     // Handle commit button click
     document.getElementById('commitBtn').addEventListener('click', function() {
         const reservationId = document.getElementById('reservationId').textContent;
@@ -172,18 +277,26 @@ function initializeApp() {
     
     // Update the confirmAction event listener
     document.getElementById('confirmAction').addEventListener('click', function() {
+        console.log('Confirm action clicked');
+        
         if (confirmModalAction) {
-            const success = confirmModalAction();
-            
-            // Only close modal if the action was successful
-            if (success !== false) {
+            try {
+                const success = confirmModalAction();
+                console.log('Confirm action result:', success);
+                
+                // Always close modal and handle any failures separately
                 const confirmModal = bootstrap.Modal.getInstance(document.getElementById('confirmModal'));
-                confirmModal.hide();
+                if (confirmModal) {
+                    confirmModal.hide();
+                }
+            } catch (error) {
+                console.error('Error in confirmModalAction:', error);
+                showAlert('Error processing your request: ' + error.message, 'danger');
             }
         }
     });
     
-        // Add input event listener to reset validation state
+    // Add input event listener to reset validation state
     document.getElementById('confirmServerName').addEventListener('input', function() {
         this.classList.remove('is-invalid');
     });
@@ -191,61 +304,103 @@ function initializeApp() {
     // Action handlers (commit and delete) using event delegation
     document.addEventListener('click', function(e) {
         // Commit button clicked
-        if (e.target.classList.contains('commit-btn')) {
-            const reservationId = e.target.dataset.id;
-            commitReservation(reservationId);
+        if (e.target.classList.contains('commit-btn') || e.target.closest('.commit-btn')) {
+            const button = e.target.classList.contains('commit-btn') ? e.target : e.target.closest('.commit-btn');
+            const reservationId = button.dataset.id;
+            if (reservationId) {
+                console.log('Commit clicked for:', reservationId);
+                commitReservation(reservationId);
+            } else {
+                console.error('Missing reservationId for commit button');
+            }
         }
         
-    // Delete button clicked
-    if (e.target.classList.contains('delete-btn')) {
-        const reservationId = e.target.dataset.id;
-        const serverName = e.target.dataset.name;
-        const isCommitted = e.target.closest('tr').querySelector('.badge').textContent.trim() === 'Committed';
-        
-        // Store server name for validation
-        serverNameToDelete = serverName;
-        
-        // Set up confirmation modal with appropriate warning
-        let message = `Are you sure you want to delete the reservation for "${serverName}"?`;
-        
-        if (isCommitted) {
-            message = `WARNING: "${serverName}" is COMMITTED. Deleting this reservation could cause conflicts if the server name is already in use.`;
+        // Delete button clicked
+        if (e.target.classList.contains('delete-btn') || e.target.closest('.delete-btn')) {
+            // Get the button element (might be the icon inside the button)
+            const button = e.target.classList.contains('delete-btn') ? e.target : e.target.closest('.delete-btn');
             
-            // Show name confirmation section for committed reservations
-            document.getElementById('nameConfirmationSection').classList.remove('d-none');
-            document.getElementById('confirmServerName').value = '';
-            document.getElementById('confirmServerName').classList.remove('is-invalid');
-        } else {
-            // Hide name confirmation for non-committed reservations
-            document.getElementById('nameConfirmationSection').classList.add('d-none');
-        }
-        
-        document.getElementById('confirmMessage').innerHTML = message;
-        
-        document.getElementById('confirmAction').classList.add('btn-danger');
-        document.getElementById('confirmAction').textContent = 'Delete';
-        
-        const confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
-        confirmModalAction = () => {
-            // For committed reservations, verify the name matches
-            if (isCommitted) {
-                const enteredName = document.getElementById('confirmServerName').value;
-                if (enteredName !== serverName) {
-                    document.getElementById('confirmServerName').classList.add('is-invalid');
-                    return false; // Prevent modal from closing
-                }
+            const reservationId = button.dataset.id;
+            const serverName = button.dataset.name;
+            
+            if (!reservationId || !serverName) {
+                console.error('Missing required data attributes:', button);
+                showAlert('Error: Missing reservation data', 'danger');
+                return;
             }
             
-            // If validation passes, delete the reservation
-            deleteReservation(reservationId);
-            return true; // Allow modal to close
-        };
-        
-        confirmModal.show();
-    }
+            console.log('Delete clicked for:', reservationId, serverName);
+            
+            const isCommitted = button.closest('tr').querySelector('.badge').textContent.trim() === 'Committed';
+            
+            // Store server name for validation
+            serverNameToDelete = serverName;
+            
+            // Set up confirmation modal with appropriate warning
+            let message = `Are you sure you want to delete the reservation for "${serverName}"?`;
+            
+            if (isCommitted) {
+                message = `WARNING: "${serverName}" is COMMITTED. Deleting this reservation could cause conflicts if the server name is already in use.`;
+                
+                // Show name confirmation section for committed reservations
+                document.getElementById('nameConfirmationSection').classList.remove('d-none');
+                document.getElementById('confirmServerName').value = '';
+                document.getElementById('confirmServerName').classList.remove('is-invalid');
+            } else {
+                // Hide name confirmation for non-committed reservations
+                document.getElementById('nameConfirmationSection').classList.add('d-none');
+            }
+            
+            document.getElementById('confirmMessage').innerHTML = message;
+            
+            document.getElementById('confirmAction').classList.add('btn-danger');
+            document.getElementById('confirmAction').textContent = 'Delete';
+            
+            const confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
+            confirmModalAction = () => {
+                console.log('Confirming deletion of:', reservationId);
+                
+                // For committed reservations, verify the name matches
+                if (isCommitted) {
+                    const enteredName = document.getElementById('confirmServerName').value;
+                    if (enteredName !== serverName) {
+                        document.getElementById('confirmServerName').classList.add('is-invalid');
+                        return false; // Prevent modal from closing
+                    }
+                }
+                
+                // If validation passes, delete the reservation
+                deleteReservation(reservationId);
+                return true; // Allow modal to close
+            };
+            
+            confirmModal.show();
+        }
+    });
+    
+    // Call improveClickResponsiveness to make sure it's applied after initialization
+    enhanceActionButtonsClickability();
+}
 
+// Function to enhance button clickability
+function enhanceActionButtonsClickability() {
+    document.querySelectorAll('.delete-btn, .commit-btn, .release-btn').forEach(button => {
+        // Add padding and make entire button clickable
+        button.style.padding = '8px';
+        
+        // Replace icon-only content with more clickable area
+        if (!button.textContent.trim() || button.textContent.trim() === '') {
+            if (button.classList.contains('delete-btn')) {
+                button.innerHTML = '<i class="bi bi-trash"></i> Delete';
+            } else if (button.classList.contains('commit-btn')) {
+                button.innerHTML = '<i class="bi bi-check-circle"></i> Commit';
+            } else if (button.classList.contains('release-btn')) {
+                button.innerHTML = '<i class="bi bi-unlock"></i> Release';
+            }
+        }
     });
 }
+
 
 // Function to set up input handlers for character counting and live preview
 function setupInputHandlers() {
@@ -463,24 +618,35 @@ function updateRecentReservations(reservations) {
             // Commit button
             const commitBtn = document.createElement('button');
             commitBtn.classList.add('btn', 'btn-sm', 'btn-outline-success', 'commit-btn', 'me-2');
-            commitBtn.innerHTML = '<i class="bi bi-check-circle"></i>';
+            commitBtn.innerHTML = '<i class="bi bi-check-circle"></i> Commit';
             commitBtn.title = 'Commit';
             commitBtn.dataset.id = reservation.id;
             actionsCell.appendChild(commitBtn);
+            
+            // Delete button
+            const deleteBtn = document.createElement('button');
+            deleteBtn.classList.add('btn', 'btn-sm', 'btn-outline-danger', 'delete-btn');
+            deleteBtn.innerHTML = '<i class="bi bi-trash"></i> Delete';
+            deleteBtn.title = 'Delete';
+            deleteBtn.dataset.id = reservation.id;
+            deleteBtn.dataset.name = reservation.serverName;
+            actionsCell.appendChild(deleteBtn);
+        } else {
+            // Release button (for committed reservations)
+            const releaseBtn = document.createElement('button');
+            releaseBtn.classList.add('btn', 'btn-sm', 'btn-outline-warning', 'release-btn', 'me-2');
+            releaseBtn.innerHTML = '<i class="bi bi-unlock"></i> Release';
+            releaseBtn.title = 'Release reservation (change to reserved state)';
+            releaseBtn.dataset.id = reservation.id;
+            releaseBtn.dataset.name = reservation.serverName;
+            actionsCell.appendChild(releaseBtn);
         }
-        
-        // Delete button (now for both reserved and committed)
-        const deleteBtn = document.createElement('button');
-        deleteBtn.classList.add('btn', 'btn-sm', 'btn-outline-danger', 'delete-btn');
-        deleteBtn.innerHTML = '<i class="bi bi-trash"></i>';
-        deleteBtn.title = 'Delete';
-        deleteBtn.dataset.id = reservation.id;
-        deleteBtn.dataset.name = reservation.serverName;
-        actionsCell.appendChild(deleteBtn);
         
         row.appendChild(actionsCell);
         tableBody.appendChild(row);
     });
+    
+    enhanceActionButtonsClickability();
 }
 
 // Function to load all reservations
@@ -500,6 +666,9 @@ function loadReservations() {
         
         // Apply current filters
         applyFilters();
+        
+        // Enhance button clickability
+        setTimeout(enhanceActionButtonsClickability, 300);
     })
     .catch(error => {
         showAlert(error.message, 'danger');
@@ -578,6 +747,9 @@ function applyFilters() {
     
     // Update the table
     updateReservationsTable(filteredReservations);
+    
+    // Enhance button clickability after updating table
+    setTimeout(enhanceActionButtonsClickability, 300);
 }
 
 // Function to update the reservations table
@@ -646,31 +818,44 @@ function updateReservationsTable(reservations) {
         const actionsCell = document.createElement('td');
         
         if (reservation.status === 'reserved') {
-            // Commit button
+            // Commit button for reserved reservations
             const commitBtn = document.createElement('button');
             commitBtn.classList.add('btn', 'btn-sm', 'btn-outline-success', 'commit-btn', 'me-2');
-            commitBtn.innerHTML = '<i class="bi bi-check-circle"></i>';
+            commitBtn.innerHTML = '<i class="bi bi-check-circle"></i> Commit';
             commitBtn.title = 'Commit';
             commitBtn.dataset.id = reservation.id;
             actionsCell.appendChild(commitBtn);
+            
+            // Delete button for reserved reservations
+            const deleteBtn = document.createElement('button');
+            deleteBtn.classList.add('btn', 'btn-sm', 'btn-outline-danger', 'delete-btn');
+            deleteBtn.innerHTML = '<i class="bi bi-trash"></i> Delete';
+            deleteBtn.title = 'Delete';
+            deleteBtn.dataset.id = reservation.id;
+            deleteBtn.dataset.name = reservation.serverName;
+            actionsCell.appendChild(deleteBtn);
+        } else {
+            // Release button for committed reservations
+            const releaseBtn = document.createElement('button');
+            releaseBtn.classList.add('btn', 'btn-sm', 'btn-outline-warning', 'release-btn', 'me-2');
+            releaseBtn.innerHTML = '<i class="bi bi-unlock"></i> Release';
+            releaseBtn.title = 'Release reservation (change to reserved state)';
+            releaseBtn.dataset.id = reservation.id;
+            releaseBtn.dataset.name = reservation.serverName;
+            actionsCell.appendChild(releaseBtn);
         }
-        
-        // Delete button (now for both reserved and committed)
-        const deleteBtn = document.createElement('button');
-        deleteBtn.classList.add('btn', 'btn-sm', 'btn-outline-danger', 'delete-btn');
-        deleteBtn.innerHTML = '<i class="bi bi-trash"></i>';
-        deleteBtn.title = 'Delete';
-        deleteBtn.dataset.id = reservation.id;
-        deleteBtn.dataset.name = reservation.serverName;
-        actionsCell.appendChild(deleteBtn);
         
         row.appendChild(actionsCell);
         tableBody.appendChild(row);
     });
+    
+    // Make sure buttons are clickable
+    enhanceActionButtonsClickability();
 }
-
 // Function to commit a reservation
 function commitReservation(reservationId) {
+    console.log('Committing reservation:', reservationId);
+    
     fetch('/api/commit', {
         method: 'POST',
         headers: {
@@ -679,39 +864,64 @@ function commitReservation(reservationId) {
         body: JSON.stringify({ reservationId })
     })
     .then(response => {
+        console.log('Commit response status:', response.status);
+        
         if (!response.ok) {
-            return response.json().then(err => { throw new Error(err.message || 'Failed to commit reservation'); });
+            return response.json().then(err => { 
+                throw new Error(err.message || 'Failed to commit reservation'); 
+            });
         }
         return response.json();
     })
     .then(data => {
+        console.log('Commit success:', data);
         showAlert('Reservation committed successfully', 'success');
         document.getElementById('reservationResult').classList.add('d-none');
         loadReservations(); // Refresh the reservations list
         loadDashboardData(); // Refresh dashboard data
     })
     .catch(error => {
+        console.error('Commit error:', error);
         showAlert(error.message, 'danger');
     });
 }
 
 // Function to delete a reservation
 function deleteReservation(reservationId) {
+    console.log('Attempting to delete reservation:', reservationId);
+    
     fetch(`/api/reservations/${reservationId}`, {
         method: 'DELETE'
     })
     .then(response => {
-        if (!response.ok) {
-            return response.json().then(err => { throw new Error(err.message || 'Failed to delete reservation'); });
-        }
-        return response.json();
+        console.log('Delete response status:', response.status);
+        
+        // Parse JSON response
+        return response.json().then(data => {
+            if (!response.ok) {
+                // Check specifically for the "cannot delete a committed reservation" error
+                if (data.message && data.message.includes("cannot delete a committed reservation")) {
+                    throw new Error("Cannot delete a committed reservation. Please release it first.");
+                } else {
+                    throw new Error(data.message || 'Failed to delete reservation');
+                }
+            }
+            return data;
+        }).catch(err => {
+            if (!response.ok) {
+                throw new Error(`Failed to delete reservation. Status: ${response.status}`);
+            }
+            return { message: "Reservation deleted successfully" };
+        });
     })
     .then(data => {
+        console.log('Delete success:', data);
         showAlert('Reservation deleted successfully', 'success');
         loadReservations(); // Refresh the reservations list
         loadDashboardData(); // Refresh dashboard data
     })
     .catch(error => {
+        console.error('Delete error:', error);
         showAlert(error.message, 'danger');
     });
 }
@@ -743,4 +953,62 @@ function showAlert(message, type) {
         const bsAlert = new bootstrap.Alert(alertDiv);
         bsAlert.close();
     }, 5000);
+}
+
+
+// Function to release a reservation
+function releaseReservation(reservationId) {
+    console.log('Releasing reservation:', reservationId);
+    
+    // Show a loading indicator
+    document.getElementById('confirmAction').innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Releasing...';
+    document.getElementById('confirmAction').disabled = true;
+    
+    fetch('/api/release', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ reservationId })
+    })
+    .then(response => {
+        console.log('Release response status:', response.status);
+        
+        if (!response.ok) {
+            return response.json().then(err => { 
+                throw new Error(err.message || 'Failed to release reservation'); 
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Release success:', data);
+        showAlert('Reservation released successfully', 'success');
+        
+        // Close the modal
+        try {
+            const confirmModal = bootstrap.Modal.getInstance(document.getElementById('confirmModal'));
+            if (confirmModal) {
+                confirmModal.hide();
+            }
+        } catch (e) {
+            console.error('Error closing modal:', e);
+        }
+        
+        // Reset modal button
+        document.getElementById('confirmAction').innerHTML = 'Release';
+        document.getElementById('confirmAction').disabled = false;
+        
+        // Refresh data
+        loadReservations();
+        loadDashboardData();
+    })
+    .catch(error => {
+        console.error('Release error:', error);
+        showAlert(error.message, 'danger');
+        
+        // Reset modal button
+        document.getElementById('confirmAction').innerHTML = 'Release';
+        document.getElementById('confirmAction').disabled = false;
+    });
 }

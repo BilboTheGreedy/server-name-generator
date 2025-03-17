@@ -84,3 +84,45 @@ func ValidateCommitRequest(logger *utils.Logger) func(http.Handler) http.Handler
 		})
 	}
 }
+
+// ValidateReleaseRequest validates the incoming release request
+func ValidateReleaseRequest(logger *utils.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Only validate POST requests
+			if r.Method != http.MethodPost {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Check content type
+			if contentType := r.Header.Get("Content-Type"); contentType != "application/json" {
+				logger.Warn("Invalid Content-Type", "contentType", contentType)
+				utils.RespondWithError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+				return
+			}
+
+			// Parse and validate the request body
+			var payload models.ReleasePayload
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				logger.Error("Failed to decode release request body", "error", err)
+				utils.RespondWithError(w, http.StatusBadRequest, "Invalid request payload")
+				return
+			}
+
+			// Important: Reset the request body for the next handler
+			r.Body.Close()
+			r.Body = utils.CreateReadCloser(payload)
+
+			// Validate the payload
+			if err := utils.Validate(payload); err != nil {
+				logger.Error("Invalid release payload", "error", err)
+				utils.RespondWithError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+
+			// Proceed to the next handler
+			next.ServeHTTP(w, r)
+		})
+	}
+}
