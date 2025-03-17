@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # Main application service
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=database
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=server_names
+      - DB_SSL_MODE=disable
+      - LOG_LEVEL=info
+    depends_on:
+      - database
+    volumes:
+      - ./backups:/app/backups
+    restart: unless-stopped
+
+  # PostgreSQL database service
+  database:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=server_names
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Backup service
+  backup:
+    image: postgres:15-alpine
+    volumes:
+      - ./backups:/backups
+      - ./scripts/backup.sh:/backup.sh
+    environment:
+      - POSTGRES_DB=server_names
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST=database
+    depends_on:
+      - database
+    entrypoint: /bin/sh
+    command: /backup.sh
+    restart: "no"
+
+volumes:
+  postgres_data:
