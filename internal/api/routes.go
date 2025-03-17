@@ -25,6 +25,7 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 	sequenceModel := models.NewSequenceModel(db)
 	reservationModel := models.NewReservationModel(db)
 	userModel := models.NewUserModel(db)
+	apiKeyModel := models.NewAPIKeyModel(db)
 
 	// Initialize services
 	nameService := services.NewNameGeneratorService(db, sequenceModel, reservationModel, logger)
@@ -37,6 +38,8 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 	commitHandler := handlers.NewCommitHandler(nameService, logger)
 	releaseHandler := handlers.NewReleaseHandler(nameService, logger)
 	authHandler := handlers.NewAuthHandler(userModel, jwtManager, logger)
+	userManagementHandler := handlers.NewUserManagementHandler(userModel, logger)
+	apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyModel, userModel, logger)
 
 	// Create router
 	r := chi.NewRouter()
@@ -53,7 +56,7 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-API-Key"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300, // Maximum value not readily exceeded by browsers
@@ -76,15 +79,15 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 
 			// Protected auth routes
 			r.Group(func(r chi.Router) {
-				r.Use(custommw.Authenticate(jwtManager, logger))
+				r.Use(custommw.CombinedAuth(jwtManager, apiKeyModel, logger))
 				r.Get("/me", authHandler.GetCurrentUser)
 			})
 		})
 
 		// Protected API routes - require authentication
 		r.Group(func(r chi.Router) {
-			// Apply authentication middleware
-			r.Use(custommw.Authenticate(jwtManager, logger))
+			// Apply combined authentication middleware (JWT or API Key)
+			r.Use(custommw.CombinedAuth(jwtManager, apiKeyModel, logger))
 
 			// Regular user endpoints
 			r.With(custommw.ValidateReservationRequest(logger)).
@@ -155,6 +158,26 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 					}
 					utils.RespondWithJSON(w, http.StatusOK, stats)
 				})
+
+				// User management endpoints (admin only)
+				r.Route("/users", func(r chi.Router) {
+					r.Get("/", userManagementHandler.GetAllUsers)
+					r.Post("/", userManagementHandler.CreateUser)
+					r.Get("/{id}", userManagementHandler.GetUser)
+					r.Put("/{id}", userManagementHandler.UpdateUser)
+					r.Post("/{id}/password", userManagementHandler.ChangeUserPassword)
+					r.Delete("/{id}", userManagementHandler.DeleteUser)
+				})
+
+				// Admin API key management
+				r.Get("/api-keys", apiKeyHandler.GetAll)
+			})
+
+			// User API key management (for current user)
+			r.Route("/api-keys", func(r chi.Router) {
+				r.Get("/", apiKeyHandler.GetAllForUser)
+				r.Post("/", apiKeyHandler.Create)
+				r.Delete("/{id}", apiKeyHandler.Revoke)
 			})
 		})
 	})

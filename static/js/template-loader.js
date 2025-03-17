@@ -7,6 +7,8 @@ document.addEventListener('DOMContentLoaded', function() {
         { id: 'dashboard', path: '/static/templates/dashboard.html' },
         { id: 'generate', path: '/static/templates/generate.html' },
         { id: 'manage', path: '/static/templates/manage.html' },
+        { id: 'users', path: '/static/templates/users.html' },
+        { id: 'apikeys', path: '/static/templates/apikeys.html' },
         { id: 'statistics', path: '/static/templates/statistics.html' },
         { id: 'apiExplorer', path: '/static/templates/api-explorer.html' }
     ];

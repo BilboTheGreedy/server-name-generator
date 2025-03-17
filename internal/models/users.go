@@ -226,3 +226,52 @@ func (m *UserModel) GetAll(ctx context.Context) ([]*User, error) {
 
 	return users, nil
 }
+
+// Update updates a user's information
+func (m *UserModel) Update(ctx context.Context, user *User) error {
+	query := `
+		UPDATE users
+		SET username = $1, email = $2, role = $3, updated_at = $4
+		WHERE id = $5
+	`
+
+	_, err := m.DB.ExecContext(
+		ctx,
+		query,
+		user.Username,
+		user.Email,
+		user.Role,
+		user.UpdatedAt,
+		user.ID,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+
+	return nil
+}
+
+// Delete deletes a user
+func (m *UserModel) Delete(ctx context.Context, id string) error {
+	query := `
+		DELETE FROM users
+		WHERE id = $1
+	`
+
+	result, err := m.DB.ExecContext(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("user not found")
+	}
+
+	return nil
+}

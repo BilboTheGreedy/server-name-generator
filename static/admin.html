@@ -31,6 +31,12 @@
                     <li class="nav-item">
                         <a class="nav-link" href="#" id="nav-manage">Manage Names</a>
                     </li>
+                    <li class="nav-item admin-only d-none">
+                        <a class="nav-link" href="#" id="nav-users">Users</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="nav-apikeys">API Keys</a>
+                    </li>
                     <!-- User info will be inserted here by auth.js -->
                 </ul>
             </div>
@@ -57,6 +63,18 @@
                     <a class="nav-link" href="#" id="side-manage">
                         <i class="bi bi-list-check"></i>
                         Manage Names
+                    </a>
+                </li>
+                <li class="nav-item admin-only d-none">
+                    <a class="nav-link" href="#" id="side-users">
+                        <i class="bi bi-people"></i>
+                        Users
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="#" id="side-apikeys">
+                        <i class="bi bi-key"></i>
+                        API Keys
                     </a>
                 </li>
                 <li class="nav-item">
@@ -87,6 +105,12 @@
             
             <!-- Manage Tab - Loaded via JavaScript -->
             <div class="tab-pane fade" id="manage"></div>
+            
+            <!-- Users Tab - Loaded via JavaScript -->
+            <div class="tab-pane fade" id="users"></div>
+            
+            <!-- API Keys Tab - Loaded via JavaScript -->
+            <div class="tab-pane fade" id="apikeys"></div>
             
             <!-- Statistics Tab - Loaded via JavaScript -->
             <div class="tab-pane fade" id="statistics"></div>
@@ -145,6 +169,10 @@
     <script src="/static/js/template-loader.js"></script>
     <!-- Main admin dashboard functionality -->
     <script src="/static/js/admin.js"></script>
+    <!-- User management functionality -->
+    <script src="/static/js/users.js"></script>
+    <!-- API Key management functionality -->
+    <script src="/static/js/apikeys.js"></script>
     <!-- API Explorer functionality -->
     <script src="/static/js/api-explorer.js"></script>
 </body>

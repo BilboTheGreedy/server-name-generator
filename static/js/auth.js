@@ -288,3 +288,37 @@ window.authService = {
     login: handleLogin,
     logout: handleLogout
 };
+
+
+// Show authenticated UI elements
+function showAuthenticatedUI() {
+    // Hide login form if present
+    const loginForm = document.querySelector('.container:has(#loginForm)');
+    if (loginForm) {
+        loginForm.style.display = 'none';
+    }
+    
+    // Show the main content
+    const mainContent = document.querySelector('main');
+    if (mainContent) {
+        mainContent.classList.remove('d-none');
+    }
+    
+    // Update user info in the UI
+    updateUserInfo();
+    
+    // Show/hide admin features based on user role
+    if (typeof showHideAdminFeatures === 'function') {
+        showHideAdminFeatures();
+    }
+    
+    // Load dashboard data
+    if (typeof loadDashboardData === 'function') {
+        loadDashboardData();
+    }
+    
+    // Load reservations
+    if (typeof loadReservations === 'function') {
+        loadReservations();
+    }
+}

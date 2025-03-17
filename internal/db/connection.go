@@ -98,5 +98,15 @@ func initializeDatabase(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("failed to create status index: %w", err)
 	}
 
+	// Initialize authentication tables and default admin user
+	if err := InitializeAuthTables(ctx, db); err != nil {
+		return fmt.Errorf("failed to initialize authentication tables: %w", err)
+	}
+
+	// Initialize API keys tables
+	if err := InitializeAPIKeysTables(ctx, db); err != nil {
+		return fmt.Errorf("failed to initialize API keys tables: %w", err)
+	}
+
 	return nil
 }
