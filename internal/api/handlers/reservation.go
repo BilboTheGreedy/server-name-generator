@@ -33,23 +33,16 @@ func (h *ReservationHandler) Reserve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate payload
-	if err := utils.Validate(payload); err != nil {
-		h.logger.Error("Invalid reservation payload", "error", err)
-		utils.RespondWithError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
 	// Reserve server name
 	result, err := h.nameService.ReserveServerName(r.Context(), payload)
 	if err != nil {
 		h.logger.Error("Failed to reserve server name", "error", err)
-		utils.RespondWithError(w, http.StatusInternalServerError, "Failed to reserve server name")
+		utils.RespondWithError(w, http.StatusInternalServerError, "Failed to reserve server name: "+err.Error())
 		return
 	}
 
-	h.logger.Info("Server name reserved",
-		"reservationId", result.ReservationID,
+	h.logger.Info("Server name reserved", 
+		"reservationId", result.ReservationID, 
 		"serverName", result.ServerName,
 	)
 

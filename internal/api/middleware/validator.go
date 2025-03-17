@@ -25,7 +25,7 @@ func ValidateReservationRequest(logger *utils.Logger) func(http.Handler) http.Ha
 				return
 			}
 
-			// Parse and validate the request body
+			// Parse the request body
 			var payload models.ReservationPayload
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				logger.Error("Failed to decode request body", "error", err)
@@ -37,14 +37,7 @@ func ValidateReservationRequest(logger *utils.Logger) func(http.Handler) http.Ha
 			r.Body.Close()
 			r.Body = utils.CreateReadCloser(payload)
 
-			// Validate the payload
-			if err := utils.Validate(payload); err != nil {
-				logger.Error("Invalid reservation payload", "error", err)
-				utils.RespondWithError(w, http.StatusBadRequest, err.Error())
-				return
-			}
-
-			// Proceed to the next handler
+			// Proceed to the next handler - we're no longer validating required fields
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -79,7 +72,7 @@ func ValidateCommitRequest(logger *utils.Logger) func(http.Handler) http.Handler
 			r.Body.Close()
 			r.Body = utils.CreateReadCloser(payload)
 
-			// Validate the payload
+			// Validate the payload (still required for commit)
 			if err := utils.Validate(payload); err != nil {
 				logger.Error("Invalid commit payload", "error", err)
 				utils.RespondWithError(w, http.StatusBadRequest, err.Error())
