@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/cors"
 
 	"github.com/bilbothegreedy/server-name-generator/internal/api/handlers"
+	"github.com/bilbothegreedy/server-name-generator/internal/api/health"
 	custommw "github.com/bilbothegreedy/server-name-generator/internal/api/middleware"
 	"github.com/bilbothegreedy/server-name-generator/internal/auth"
 	"github.com/bilbothegreedy/server-name-generator/internal/config"
@@ -19,21 +20,22 @@ import (
 	"github.com/bilbothegreedy/server-name-generator/internal/utils"
 )
 
-// SetupRouter configures and returns the API router
-func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Handler {
-	// Initialize models
+// SetupRouter configures and returns the API router.
+// The startTime parameter should be the application start time.
+func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger, startTime time.Time) http.Handler {
+	// Initialize models.
 	sequenceModel := models.NewSequenceModel(db)
 	reservationModel := models.NewReservationModel(db)
 	userModel := models.NewUserModel(db)
 	apiKeyModel := models.NewAPIKeyModel(db)
 
-	// Initialize services
+	// Initialize services.
 	nameService := services.NewNameGeneratorService(db, sequenceModel, reservationModel, logger)
 
-	// Initialize JWT manager
+	// Initialize JWT manager.
 	jwtManager := auth.NewJWTManager(cfg.Auth.JWTSecret, cfg.Auth.TokenDuration)
 
-	// Initialize handlers
+	// Initialize handlers.
 	reservationHandler := handlers.NewReservationHandler(nameService, logger)
 	commitHandler := handlers.NewCommitHandler(nameService, logger)
 	releaseHandler := handlers.NewReleaseHandler(nameService, logger)
@@ -41,67 +43,59 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 	userManagementHandler := handlers.NewUserManagementHandler(userModel, logger)
 	apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyModel, userModel, logger)
 
-	// Create router
+	// Create router.
 	r := chi.NewRouter()
 
-	// Global middleware
-	r.Use(custommw.RequestIDMiddleware()) // Add this first
+	// Global middleware.
+	r.Use(custommw.RequestIDMiddleware()) // Custom request ID middleware.
 	r.Use(middleware.RealIP)
-	r.Use(middleware.RequestID) // Keep Chi's request ID middleware as fallback
-	r.Use(middleware.Recoverer) // Keep Chi's recoverer as fallback
+	r.Use(middleware.RequestID) // Fallback request ID.
+	r.Use(middleware.Recoverer) // Fallback recovery.
 	r.Use(custommw.ErrorHandler(logger))
 	r.Use(custommw.RequestLogger(logger))
 	r.Use(middleware.Timeout(30 * time.Second))
 
-	// CORS configuration
+	// CORS configuration.
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-API-Key"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
-		MaxAge:           300, // Maximum value not readily exceeded by browsers
+		MaxAge:           300,
 	}))
 
-	// Public API routes - no authentication required
+	// Public API routes – no authentication required.
 	r.Route("/api", func(r chi.Router) {
-		// Health check endpoint
-		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-			utils.RespondWithJSON(w, http.StatusOK, map[string]string{
-				"status": "ok",
-				"time":   time.Now().UTC().Format(time.RFC3339),
-			})
-		})
-
-		// Authentication routes
+		// Authentication routes.
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/login", authHandler.Login)
 			r.Post("/register", authHandler.Register)
 
-			// Protected auth routes
+			// Protected auth routes.
 			r.Group(func(r chi.Router) {
 				r.Use(custommw.CombinedAuth(jwtManager, apiKeyModel, logger))
 				r.Get("/me", authHandler.GetCurrentUser)
 			})
 		})
 
-		// Protected API routes - require authentication
+		// Protected API routes – require authentication.
 		r.Group(func(r chi.Router) {
-			// Apply combined authentication middleware (JWT or API Key)
+			// Combined authentication middleware (JWT or API Key).
 			r.Use(custommw.CombinedAuth(jwtManager, apiKeyModel, logger))
 
-			// Regular user endpoints
+			// Regular user endpoints.
 			r.With(custommw.ValidateReservationRequest(logger)).
 				Post("/reserve", reservationHandler.Reserve)
 
 			r.With(custommw.ValidateCommitRequest(logger)).
 				Post("/commit", commitHandler.Commit)
 
-			// Admin-only endpoints
+			// Admin-only endpoints.
 			r.Group(func(r chi.Router) {
 				r.Use(custommw.RequireRole(models.RoleAdmin))
 
-				// Get all reservations
+				// Get all reservations.
 				r.Get("/reservations", func(w http.ResponseWriter, r *http.Request) {
 					reservations, err := nameService.GetAllReservations(r.Context())
 					if err != nil {
@@ -112,11 +106,11 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 					utils.RespondWithJSON(w, http.StatusOK, reservations)
 				})
 
-				// Release endpoint - requires admin role
+				// Release endpoint – requires admin role.
 				r.With(custommw.ValidateReleaseRequest(logger)).
 					Post("/release", releaseHandler.Release)
 
-				// Delete a reservation (admin use only)
+				// Delete a reservation (admin use only).
 				r.Delete("/reservations/{id}", func(w http.ResponseWriter, r *http.Request) {
 					id := chi.URLParam(r, "id")
 					if id == "" {
@@ -126,30 +120,24 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 					}
 
 					logger.Info("Attempting to delete reservation", "id", id)
-
 					err := nameService.DeleteReservation(r.Context(), id)
 					if err != nil {
 						logger.Error("Failed to delete reservation", "error", err, "id", id)
-
-						// Check for not found errors
 						if strings.Contains(err.Error(), "not found") {
 							utils.RespondWithError(w, http.StatusNotFound, "Reservation not found")
 							return
 						}
-
 						utils.RespondWithError(w, http.StatusInternalServerError, "Failed to delete reservation: "+err.Error())
 						return
 					}
 
 					logger.Info("Reservation deleted successfully", "id", id)
-
-					// Return success response
 					utils.RespondWithJSON(w, http.StatusOK, map[string]string{
 						"message": "Reservation deleted successfully",
 					})
 				})
 
-				// Get stats for dashboard
+				// Get stats for dashboard.
 				r.Get("/stats", func(w http.ResponseWriter, r *http.Request) {
 					stats, err := nameService.GetStats(r.Context())
 					if err != nil {
@@ -160,7 +148,7 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 					utils.RespondWithJSON(w, http.StatusOK, stats)
 				})
 
-				// User management endpoints (admin only)
+				// User management endpoints (admin only).
 				r.Route("/users", func(r chi.Router) {
 					r.Get("/", userManagementHandler.GetAllUsers)
 					r.Post("/", userManagementHandler.CreateUser)
@@ -170,11 +158,11 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 					r.Delete("/{id}", userManagementHandler.DeleteUser)
 				})
 
-				// Admin API key management
+				// Admin API key management.
 				r.Get("/api-keys", apiKeyHandler.GetAll)
 			})
 
-			// User API key management (for current user)
+			// User API key management (for current user).
 			r.Route("/api-keys", func(r chi.Router) {
 				r.Get("/", apiKeyHandler.GetAllForUser)
 				r.Post("/", apiKeyHandler.Create)
@@ -183,28 +171,25 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 		})
 	})
 
-	// Redirects from root and /admin/ to /admin
+	// Redirects from root and /admin/ to /admin.
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin", http.StatusMovedPermanently)
 	})
-
 	r.Get("/admin/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin", http.StatusMovedPermanently)
 	})
 
-	// Serve admin dashboard with authentication
+	// Serve admin dashboard with authentication.
 	r.Group(func(r chi.Router) {
-		// Use optional authentication to allow access to login page
 		r.Use(custommw.OptionalAuth(jwtManager, logger))
-
 		r.Get("/admin", func(w http.ResponseWriter, r *http.Request) {
 			http.ServeFile(w, r, "./static/admin.html")
 		})
-
-		// Serve static files for the admin dashboard
 		fileServer := http.FileServer(http.Dir("./static"))
 		r.Handle("/static/*", http.StripPrefix("/static", fileServer))
 	})
 
+	// Register the comprehensive health check endpoint.
+	r.Get("/api/health", health.GetHealthCheck(cfg, db, logger, startTime))
 	return r
 }

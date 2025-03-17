@@ -14,75 +14,33 @@ import (
 	"github.com/bilbothegreedy/server-name-generator/internal/config"
 	"github.com/bilbothegreedy/server-name-generator/internal/db"
 	"github.com/bilbothegreedy/server-name-generator/internal/utils"
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
-// runMigrations handles database schema migrations
-func runMigrations(dbURL string) error {
-	// Construct migration URL
-	migrationURL := fmt.Sprintf("file://migrations")
-
-	// Create a new migrator
-	m, err := migrate.New(migrationURL, dbURL)
-	if err != nil {
-		return fmt.Errorf("failed to create migration instance: %w", err)
-	}
-
-	// Run migrations
-	if err := m.Up(); err != nil {
-		// It's okay if no change is needed
-		if err == migrate.ErrNoChange {
-			log.Println("No database migrations needed")
-			return nil
-		}
-		return fmt.Errorf("failed to run migrations: %w", err)
-	}
-
-	log.Println("Database migrations completed successfully")
-	return nil
-}
-
-// Optional: Rollback function for downgrades
-func rollbackMigrations(dbURL string) error {
-	migrationURL := fmt.Sprintf("file://migrations")
-
-	m, err := migrate.New(migrationURL, dbURL)
-	if err != nil {
-		return fmt.Errorf("failed to create migration instance: %w", err)
-	}
-
-	if err := m.Down(); err != nil {
-		return fmt.Errorf("failed to rollback migrations: %w", err)
-	}
-
-	log.Println("Database migrations rolled back successfully")
-	return nil
-}
-
 func main() {
-	// Load configuration
+	// Load configuration.
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Initialize logger
+	// Initialize logger.
 	logger := utils.NewLogger(cfg.LogLevel)
 	logger.Info("Starting server name generator service")
 
-	// Connect to database
+	// Capture application start time.
+	startTime := time.Now()
+
+	// Connect to database (this runs migrations as needed).
 	database, err := db.Connect(cfg.Database, logger)
 	if err != nil {
 		logger.Fatal("Failed to connect to database", "error", err)
 	}
 	defer database.Close()
 
-	// Initialize router
-	router := api.SetupRouter(cfg, database, logger)
+	// Initialize router, now passing startTime for uptime calculation.
+	router := api.SetupRouter(cfg, database, logger, startTime)
 
-	// Configure server
+	// Configure HTTP server.
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
 		Handler:      router,
@@ -91,7 +49,7 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start server in a goroutine
+	// Start server in a goroutine.
 	go func() {
 		logger.Info("Server listening", "port", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -99,13 +57,12 @@ func main() {
 		}
 	}()
 
-	// Set up graceful shutdown
+	// Graceful shutdown.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	logger.Info("Shutting down server...")
 
-	// Give server max 5 seconds to finish requests
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
