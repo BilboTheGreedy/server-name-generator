@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,21 +18,25 @@ import (
 	"github.com/bilbothegreedy/server-name-generator/internal/utils"
 )
 
-// In internal/db/connection.go
+// Connect opens the database connection, sets the pool parameters, tests the connection,
+// and then runs migrations.
 func Connect(cfg config.DatabaseConfig, logger *utils.Logger) (*sql.DB, error) {
 	// Construct connection string in URL format
-	connStr := fmt.Sprintf(
-		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		cfg.Username,
-		url.QueryEscape(cfg.Password),
-		cfg.Host,
-		cfg.Port,
-		cfg.Name,
-		cfg.SSLMode,
-	)
+	urlQuery := url.Values{}
+	if cfg.SSLMode != "" {
+		urlQuery.Add("sslmode", cfg.SSLMode)
+	}
+
+	dbURL := &url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(cfg.Username, cfg.Password),
+		Host:     fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+		Path:     "/" + cfg.Name,
+		RawQuery: urlQuery.Encode(),
+	}
 
 	// Open connection to database
-	db, err := sql.Open("postgres", connStr)
+	db, err := sql.Open("postgres", dbURL.String())
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
@@ -52,7 +57,7 @@ func Connect(cfg config.DatabaseConfig, logger *utils.Logger) (*sql.DB, error) {
 
 	// Run database migrations
 	if logger != nil {
-		if err := runMigrations(connStr, logger); err != nil {
+		if err := runMigrations(dbURL.String(), logger); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("failed to run migrations: %w", err)
 		}
@@ -61,15 +66,25 @@ func Connect(cfg config.DatabaseConfig, logger *utils.Logger) (*sql.DB, error) {
 	return db, nil
 }
 
-// Updated runMigrations function
+// runMigrations locates the migrations folder, creates a migrator instance, and runs migrations.
 func runMigrations(dbURL string, logger *utils.Logger) error {
 	// Ensure the URL has the postgres:// scheme
 	if !strings.HasPrefix(dbURL, "postgres://") && !strings.HasPrefix(dbURL, "postgresql://") {
 		dbURL = fmt.Sprintf("postgres://%s", dbURL)
 	}
 
-	// Define possible migration paths
+	// Define possible migration paths in prioritized order
 	possiblePaths := []string{
+		// Try current working directory (often the project root if you run from there)
+		func() string {
+			wd, err := os.Getwd()
+			if err == nil {
+				return filepath.Join(wd, "migrations")
+			}
+			return ""
+		}(),
+		// Try one directory up (useful if the executable is in a subfolder)
+		"../migrations",
 		// Try executable directory
 		func() string {
 			execPath, err := os.Executable()
@@ -78,29 +93,20 @@ func runMigrations(dbURL string, logger *utils.Logger) error {
 			}
 			return ""
 		}(),
-
-		// Try current working directory
-		func() string {
-			wd, err := os.Getwd()
-			if err == nil {
-				return filepath.Join(wd, "migrations")
-			}
-			return ""
-		}(),
-
-		// Try relative to executable
+		// Try parent directory of executable
 		func() string {
 			execPath, err := os.Executable()
 			if err == nil {
-				return filepath.Join(filepath.Dir(execPath), "..", "migrations")
+				parentDir := filepath.Dir(filepath.Dir(execPath))
+				return filepath.Join(parentDir, "migrations")
 			}
 			return ""
 		}(),
-
-		// Hardcoded fallback paths
+		// Fallback relative paths
 		"./migrations",
-		"../migrations",
 		"../../migrations",
+		// Hardcoded absolute path (adjust if necessary)
+		"C:\\projects\\HostnameService\\server-name-generator\\migrations",
 	}
 
 	// Find the first existing migration path
@@ -115,9 +121,13 @@ func runMigrations(dbURL string, logger *utils.Logger) error {
 			continue
 		}
 
-		if _, err := os.Stat(absPath); !os.IsNotExist(err) {
-			migrationPath = absPath
-			break
+		// Check if directory exists and contains migration files
+		if stat, err := os.Stat(absPath); err == nil && stat.IsDir() {
+			files, err := os.ReadDir(absPath)
+			if err == nil && len(files) > 0 {
+				migrationPath = absPath
+				break
+			}
 		}
 	}
 
@@ -126,8 +136,18 @@ func runMigrations(dbURL string, logger *utils.Logger) error {
 		return fmt.Errorf("could not find migrations directory")
 	}
 
+	// Log the migration path chosen for debugging purposes
+	if logger != nil {
+		logger.Info("Using migration path", "path", migrationPath)
+	}
+
 	// Normalize path for URL (works on both Windows and Unix-like systems)
-	migrationURL := "file:///" + strings.ReplaceAll(filepath.ToSlash(migrationPath), "\\", "/")
+	// On Windows, using "file://" (two slashes) instead of "file:///" may resolve the error.
+	migrationURL := "file://" + strings.ReplaceAll(filepath.ToSlash(migrationPath), "\\", "/")
+
+	if logger != nil {
+		logger.Info("Constructed migration URL", "url", migrationURL)
+	}
 
 	// Create migrator
 	m, err := migrate.New(
@@ -145,14 +165,13 @@ func runMigrations(dbURL string, logger *utils.Logger) error {
 	}
 
 	if logger != nil {
-		logger.Info("Database migrations completed successfully",
-			"path", migrationPath)
+		logger.Info("Database migrations completed successfully", "path", migrationPath)
 	}
 
 	return nil
 }
 
-// initializeDatabase creates necessary tables if they don't exist
+// initializeDatabase creates necessary tables if they don't exist.
 func initializeDatabase(ctx context.Context, db *sql.DB) error {
 	// Create sequences table
 	createSequencesTable := `
