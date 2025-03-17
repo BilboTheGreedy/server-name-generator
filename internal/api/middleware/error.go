@@ -1,10 +1,12 @@
+// internal/api/middleware/error.go (update)
 package middleware
 
 import (
-	"errors"
 	"net/http"
 	"runtime/debug"
+	"time"
 
+	"github.com/bilbothegreedy/server-name-generator/internal/errors"
 	"github.com/bilbothegreedy/server-name-generator/internal/utils"
 )
 
@@ -13,19 +15,23 @@ func ErrorHandler(logger *utils.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
-				if err := recover(); err != nil {
-					// Log the stack trace
-					logger.Error(
+				if rec := recover(); rec != nil {
+					// Get stack trace
+					stack := debug.Stack()
+
+					// Log the panic with context
+					ctx := r.Context()
+					logger.WithContext(ctx).Error(
 						"Panic recovered",
-						"error", err,
-						"stacktrace", string(debug.Stack()),
+						"error", rec,
+						"stacktrace", string(stack),
 						"path", r.URL.Path,
 						"method", r.Method,
 					)
 
-					// Respond with error
+					// Convert to error message
 					var errorMsg string
-					switch e := err.(type) {
+					switch e := rec.(type) {
 					case string:
 						errorMsg = e
 					case error:
@@ -34,7 +40,17 @@ func ErrorHandler(logger *utils.Logger) func(http.Handler) http.Handler {
 						errorMsg = "Unknown server error"
 					}
 
-					utils.RespondWithError(w, http.StatusInternalServerError, errorMsg)
+					// Create application error
+					appErr := errors.NewInternalError("Server error", nil).
+						WithDetail(errorMsg)
+
+					// Add request ID if present
+					if requestID, ok := ctx.Value(utils.RequestIDKey).(string); ok {
+						appErr.WithRequestID(requestID)
+					}
+
+					// Respond with error
+					utils.RespondWithError(w, ctx, appErr)
 				}
 			}()
 
@@ -44,15 +60,19 @@ func ErrorHandler(logger *utils.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-// RequestLogger logs incoming requests
 func RequestLogger(logger *utils.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			logger.Info("Request received",
-				"method", r.Method,
-				"path", r.URL.Path,
-				"remote_addr", r.RemoteAddr,
-				"user_agent", r.UserAgent(),
+			start := time.Now()
+			ctx := r.Context()
+
+			// Log request
+			logger.LogRequest(
+				ctx,
+				r.Method,
+				r.URL.Path,
+				r.RemoteAddr,
+				r.UserAgent(),
 			)
 
 			// Create a custom response writer to capture status code
@@ -61,11 +81,14 @@ func RequestLogger(logger *utils.Logger) func(http.Handler) http.Handler {
 			// Call the next handler
 			next.ServeHTTP(rw, r)
 
-			// Log the response status
-			logger.Info("Response sent",
-				"method", r.Method,
-				"path", r.URL.Path,
-				"status", rw.StatusCode,
+			// Log response with duration
+			duration := time.Since(start)
+			logger.LogResponse(
+				ctx,
+				r.Method,
+				r.URL.Path,
+				rw.StatusCode,
+				duration,
 			)
 		})
 	}

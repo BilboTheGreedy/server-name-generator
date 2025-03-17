@@ -45,12 +45,13 @@ func SetupRouter(cfg *config.Config, db *sql.DB, logger *utils.Logger) http.Hand
 	r := chi.NewRouter()
 
 	// Global middleware
+	r.Use(custommw.RequestIDMiddleware()) // Add this first
 	r.Use(middleware.RealIP)
-	r.Use(middleware.RequestID)
-	r.Use(middleware.Recoverer)
+	r.Use(middleware.RequestID) // Keep Chi's request ID middleware as fallback
+	r.Use(middleware.Recoverer) // Keep Chi's recoverer as fallback
 	r.Use(custommw.ErrorHandler(logger))
 	r.Use(custommw.RequestLogger(logger))
-	r.Use(middleware.Timeout(30 * time.Second)) // 30 second timeout
+	r.Use(middleware.Timeout(30 * time.Second))
 
 	// CORS configuration
 	r.Use(cors.Handler(cors.Options{

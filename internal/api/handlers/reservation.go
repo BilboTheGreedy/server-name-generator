@@ -3,7 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
+	"github.com/bilbothegreedy/server-name-generator/internal/errors"
 	"github.com/bilbothegreedy/server-name-generator/internal/models"
 	"github.com/bilbothegreedy/server-name-generator/internal/services"
 	"github.com/bilbothegreedy/server-name-generator/internal/utils"
@@ -25,24 +27,44 @@ func NewReservationHandler(nameService *services.NameGeneratorService, logger *u
 
 // Reserve handles POST /reserve requests
 func (h *ReservationHandler) Reserve(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	// Decode request body
 	var payload models.ReservationPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		h.logger.Error("Failed to decode request body", "error", err)
-		utils.RespondWithError(w, http.StatusBadRequest, "Invalid request payload")
+		h.logger.LogError(ctx, err, "Failed to decode request body")
+		appErr := errors.NewBadRequestError("Invalid request payload", err)
+		utils.RespondWithError(w, ctx, appErr)
+		return
+	}
+
+	// Validate payload
+	if err := utils.Validate(payload); err != nil {
+		h.logger.LogError(ctx, err, "Invalid reservation payload")
+		appErr := errors.NewValidationError(err.Error(), err)
+		utils.RespondWithError(w, ctx, appErr)
 		return
 	}
 
 	// Reserve server name
-	result, err := h.nameService.ReserveServerName(r.Context(), payload)
+	result, err := h.nameService.ReserveServerName(ctx, payload)
 	if err != nil {
-		h.logger.Error("Failed to reserve server name", "error", err)
-		utils.RespondWithError(w, http.StatusInternalServerError, "Failed to reserve server name: "+err.Error())
+		h.logger.LogError(ctx, err, "Failed to reserve server name")
+
+		// Convert error to appropriate type
+		var appErr *errors.AppError
+		if strings.Contains(err.Error(), "already in use") {
+			appErr = errors.NewConflictError("Server name is already in use")
+		} else {
+			appErr = errors.NewInternalError("Failed to reserve server name", err)
+		}
+
+		utils.RespondWithError(w, ctx, appErr)
 		return
 	}
 
-	h.logger.Info("Server name reserved", 
-		"reservationId", result.ReservationID, 
+	h.logger.Info("Server name reserved",
+		"reservationId", result.ReservationID,
 		"serverName", result.ServerName,
 	)
 

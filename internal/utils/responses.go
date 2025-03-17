@@ -1,3 +1,4 @@
+// internal/utils/responses.go (update)
 package utils
 
 import (
@@ -12,12 +13,21 @@ import (
 	"strings"
 	"time"
 
+	apperrors "github.com/bilbothegreedy/server-name-generator/internal/errors"
 	"github.com/go-playground/validator/v10"
 )
 
 // Common errors
 var (
 	ErrRequestTimeout = errors.New("request timed out")
+)
+
+// ContextKey type for context values
+type ContextKey string
+
+// Context keys
+const (
+	RequestIDKey ContextKey = "request_id"
 )
 
 // CustomResponseWriter extends http.ResponseWriter to track status code
@@ -42,8 +52,12 @@ func (rw *CustomResponseWriter) WriteHeader(code int) {
 
 // ErrorResponse represents an error response to be sent to the client
 type ErrorResponse struct {
-	Status  int    `json:"status"`
-	Message string `json:"message"`
+	Status    int         `json:"status"`
+	Message   string      `json:"message"`
+	Detail    string      `json:"detail,omitempty"`
+	RequestID string      `json:"requestId,omitempty"`
+	Code      string      `json:"code,omitempty"`
+	Data      interface{} `json:"data,omitempty"`
 }
 
 // SuccessResponse represents a success response to be sent to the client
@@ -53,11 +67,45 @@ type SuccessResponse struct {
 }
 
 // RespondWithError sends an error response to the client
+// Keep the original function for backward compatibility
 func RespondWithError(w http.ResponseWriter, code int, message string) {
 	RespondWithJSON(w, code, ErrorResponse{
 		Status:  code,
 		Message: message,
 	})
+}
+
+// RespondWithAppError sends an application error response to the client
+func RespondWithAppError(w http.ResponseWriter, ctx context.Context, err error) {
+	var response ErrorResponse
+	var statusCode int
+
+	// Check if it's an application error
+	if appErr, ok := err.(*apperrors.AppError); ok {
+		statusCode = appErr.StatusCode
+		response = ErrorResponse{
+			Status:    appErr.StatusCode,
+			Message:   appErr.Message,
+			Detail:    appErr.Detail,
+			RequestID: appErr.RequestID,
+			Code:      appErr.Code,
+		}
+	} else {
+		// Generic error
+		statusCode = http.StatusInternalServerError
+		response = ErrorResponse{
+			Status:  statusCode,
+			Message: "An unexpected error occurred",
+		}
+
+		// Add request ID if present in context
+		if requestID, ok := ctx.Value(RequestIDKey).(string); ok {
+			response.RequestID = requestID
+		}
+	}
+
+	// Send the response
+	RespondWithJSON(w, statusCode, response)
 }
 
 // RespondWithJSON sends a JSON response to the client

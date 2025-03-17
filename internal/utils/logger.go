@@ -1,6 +1,8 @@
+// internal/utils/logger.go (update)
 package utils
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"strings"
@@ -55,6 +57,23 @@ func NewLogger(level string) *Logger {
 	return &Logger{logger}
 }
 
+// WithRequestID adds request ID to logger
+func (l *Logger) WithRequestID(ctx context.Context) *Logger {
+	logger := l.Logger
+
+	// Add request ID from context if available
+	if requestID, ok := ctx.Value(RequestIDKey).(string); ok && requestID != "" {
+		logger = logger.With("request_id", requestID)
+	}
+
+	return &Logger{logger}
+}
+
+// WithContext creates a new logger with additional context
+func (l *Logger) WithContext(ctx ...any) *Logger {
+	return &Logger{l.Logger.With(ctx...)}
+}
+
 // Debug logs a debug message
 func (l *Logger) Debug(msg string, args ...any) {
 	l.Logger.Debug(msg, args...)
@@ -81,14 +100,10 @@ func (l *Logger) Fatal(msg string, args ...any) {
 	os.Exit(1)
 }
 
-// WithContext creates a new logger with additional context
-func (l *Logger) WithContext(ctx ...any) *Logger {
-	return &Logger{l.Logger.With(ctx...)}
-}
-
 // LogRequest logs information about an HTTP request
-func (l *Logger) LogRequest(method, path, remoteAddr, userAgent string) {
-	l.Info("Request received",
+func (l *Logger) LogRequest(ctx context.Context, method, path, remoteAddr, userAgent string) {
+	logger := l.WithRequestID(ctx)
+	logger.Info("Request received",
 		"method", method,
 		"path", path,
 		"remote_addr", remoteAddr,
@@ -97,8 +112,9 @@ func (l *Logger) LogRequest(method, path, remoteAddr, userAgent string) {
 }
 
 // LogResponse logs information about an HTTP response
-func (l *Logger) LogResponse(method, path string, statusCode int, duration time.Duration) {
-	l.Info("Response sent",
+func (l *Logger) LogResponse(ctx context.Context, method, path string, statusCode int, duration time.Duration) {
+	logger := l.WithRequestID(ctx)
+	logger.Info("Response sent",
 		"method", method,
 		"path", path,
 		"status", statusCode,
@@ -106,13 +122,15 @@ func (l *Logger) LogResponse(method, path string, statusCode int, duration time.
 	)
 }
 
-// LogError logs an error with its stack trace
-func (l *Logger) LogError(err error, msg string, args ...any) {
+// LogError logs an error with its request ID context
+func (l *Logger) LogError(ctx context.Context, err error, msg string, args ...any) {
 	if err == nil {
 		return
 	}
 
+	logger := l.WithRequestID(ctx)
+
 	// Add the error to the args list
 	newArgs := append([]any{"error", err.Error()}, args...)
-	l.Error(msg, newArgs...)
+	logger.Error(msg, newArgs...)
 }

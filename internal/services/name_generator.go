@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bilbothegreedy/server-name-generator/internal/errors"
 	"github.com/bilbothegreedy/server-name-generator/internal/models"
 	"github.com/bilbothegreedy/server-name-generator/internal/utils"
 	"github.com/google/uuid"
@@ -144,12 +145,11 @@ func (s *NameGeneratorService) GetNameBasePattern(params models.ReservationPaylo
 	)
 }
 
-// ReserveServerName reserves a new server name
 func (s *NameGeneratorService) ReserveServerName(ctx context.Context, params models.ReservationPayload) (*models.ReservationResponse, error) {
 	// Start a transaction
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
-		return nil, fmt.Errorf("failed to start transaction: %w", err)
+		return nil, errors.NewDatabaseError("Failed to start transaction", err)
 	}
 	defer tx.Rollback() // Will be ignored if transaction is committed
 
@@ -159,7 +159,7 @@ func (s *NameGeneratorService) ReserveServerName(ctx context.Context, params mod
 	// Find the latest sequence number for similar names
 	latestSequence, err := s.reservationModel.FindLatestSequenceNumber(ctx, tx, nameBasePattern)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find latest sequence number: %w", err)
+		return nil, errors.NewDatabaseError("Failed to find latest sequence number", err)
 	}
 
 	// Increment sequence number
@@ -171,11 +171,11 @@ func (s *NameGeneratorService) ReserveServerName(ctx context.Context, params mod
 	// Check if server name is unique (committed reservations)
 	isUnique, err := s.reservationModel.IsServerNameUnique(ctx, tx, serverName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check server name uniqueness: %w", err)
+		return nil, errors.NewDatabaseError("Failed to check server name uniqueness", err)
 	}
 
 	if !isUnique {
-		return nil, fmt.Errorf("server name %s is already in use", serverName)
+		return nil, errors.NewConflictError(fmt.Sprintf("Server name %s is already in use", serverName))
 	}
 
 	// Create reservation
@@ -199,12 +199,12 @@ func (s *NameGeneratorService) ReserveServerName(ctx context.Context, params mod
 	}
 
 	if err := s.reservationModel.Create(ctx, tx, reservation); err != nil {
-		return nil, fmt.Errorf("failed to create reservation: %w", err)
+		return nil, errors.NewDatabaseError("Failed to create reservation", err)
 	}
 
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+		return nil, errors.NewDatabaseError("Failed to commit transaction", err)
 	}
 
 	return &models.ReservationResponse{
