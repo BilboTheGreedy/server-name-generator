@@ -1,0 +1,18 @@
+{{define "footer"}}
+<footer class="bg-white py-6 mt-auto">
+    <div class="container mx-auto px-4">
+        <div class="flex flex-col md:flex-row justify-between items-center">
+            <div class="mb-4 md:mb-0">
+                <p class="text-gray-600">
+                    &copy; {{.CurrentYear}} Server Name Generator. All rights reserved.
+                </p>
+            </div>
+            <div class="flex space-x-4">
+                <a href="/admin" class="text-gray-600 hover:text-indigo-600">Admin</a>
+                <a href="/admin/manage" class="text-gray-600 hover:text-indigo-600">Manage</a>
+                <a href="/admin/generate" class="text-gray-600 hover:text-indigo-600">Generate</a>
+            </div>
+        </div>
+    </div>
+</footer>
+{{end}}

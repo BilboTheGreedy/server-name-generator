@@ -29,10 +29,11 @@ type AuthConfig struct {
 
 // Config holds all configuration for the application
 type Config struct {
-	Port     int
-	LogLevel string
-	Database DatabaseConfig
-	Auth     AuthConfig
+	Port        int
+	LogLevel    string
+	Environment string
+	Database    DatabaseConfig
+	Auth        AuthConfig
 }
 
 // Load reads configuration from environment variables
@@ -47,6 +48,7 @@ func Load() (*Config, error) {
 	}
 
 	logLevel := getEnv("LOG_LEVEL", "info")
+	environment := getEnv("ENVIRONMENT", "development")
 
 	// Database configuration
 	dbPort, err := strconv.Atoi(getEnv("DB_PORT", "5432"))
@@ -79,8 +81,9 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		Port:     port,
-		LogLevel: logLevel,
+		Port:        port,
+		LogLevel:    logLevel,
+		Environment: environment,
 		Database: DatabaseConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
 			Port:     dbPort,

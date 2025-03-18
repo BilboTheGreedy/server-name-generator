@@ -1,0 +1,302 @@
+{{template "admin" .}}
+
+{{define "title"}}Dashboard{{end}}
+
+{{define "content"}}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold mb-6">Dashboard</h1>
+    
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div class="bg-white rounded-lg shadow p-6 flex items-center">
+            <div class="rounded-full bg-blue-100 p-3 mr-4">
+                <svg class="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+                </svg>
+            </div>
+            <div>
+                <p class="text-gray-500">Total Names</p>
+                <p class="text-2xl font-bold" id="total-count" 
+                   hx-get="/api/stats" 
+                   hx-trigger="load"
+                   hx-swap="innerHTML"
+                   hx-select="#total-count">
+                   {{.Data.Stats.TotalReservations}}
+                </p>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow p-6 flex items-center">
+            <div class="rounded-full bg-green-100 p-3 mr-4">
+                <svg class="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </div>
+            <div>
+                <p class="text-gray-500">Committed</p>
+                <p class="text-2xl font-bold" id="committed-count"
+                   hx-get="/api/stats" 
+                   hx-trigger="load"
+                   hx-swap="innerHTML"
+                   hx-select="#committed-count">
+                   {{.Data.Stats.CommittedCount}}
+                </p>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow p-6 flex items-center">
+            <div class="rounded-full bg-yellow-100 p-3 mr-4">
+                <svg class="w-8 h-8 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </div>
+            <div>
+                <p class="text-gray-500">Reserved</p>
+                <p class="text-2xl font-bold" id="reserved-count"
+                   hx-get="/api/stats" 
+                   hx-trigger="load"
+                   hx-swap="innerHTML"
+                   hx-select="#reserved-count">
+                   {{.Data.Stats.ReservedCount}}
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Activity Charts -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4">Daily Activity</h2>
+            <div class="h-64">
+                <canvas id="activityChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4">Environment Distribution</h2>
+            <div class="h-64">
+                <canvas id="environmentChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Reservations -->
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+        <div class="p-6 bg-gray-50 border-b flex justify-between items-center">
+            <h2 class="text-lg font-semibold">Recent Reservations</h2>
+            <button class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+                    hx-get="/admin/reservations"
+                    hx-target="#reservation-table-body"
+                    hx-swap="innerHTML"
+                    hx-indicator="#loading-indicator">
+                <span class="htmx-indicator" id="loading-indicator">
+                    <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </span>
+                Refresh
+            </button>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Server Name</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="reservation-table-body" class="bg-white divide-y divide-gray-200">
+                    {{range .Data.RecentReservations}}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap font-mono">{{.ServerName}}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {{if eq .Status "reserved"}}
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                Reserved
+                            </span>
+                            {{else}}
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                Committed
+                            </span>
+                            {{end}}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{formatDate .CreatedAt}}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            {{if eq .Status "reserved"}}
+                            <button class="text-green-600 hover:text-green-900 mr-2"
+                                    hx-post="/api/commit"
+                                    hx-headers='{"Content-Type": "application/json"}'
+                                    hx-vals='{"reservationId": "{{.ID}}"}'
+                                    hx-swap="none"
+                                    hx-trigger="click"
+                                    hx-indicator="#loading-indicator-{{.ID}}"
+                                    hx-on::after-request="if(event.detail.successful) { htmx.trigger('#reservation-table-body', 'refreshTable'); }">
+                                <span class="htmx-indicator" id="loading-indicator-{{.ID}}">
+                                    <svg class="animate-spin h-4 w-4 text-green-600 inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                </span>
+                                Commit
+                            </button>
+                            {{else}}
+                            <button class="text-yellow-600 hover:text-yellow-900 mr-2"
+                                    hx-post="/api/release"
+                                    hx-headers='{"Content-Type": "application/json"}'
+                                    hx-vals='{"reservationId": "{{.ID}}"}'
+                                    hx-swap="none"
+                                    hx-trigger="click"
+                                    hx-indicator="#loading-indicator-{{.ID}}"
+                                    hx-on::after-request="if(event.detail.successful) { htmx.trigger('#reservation-table-body', 'refreshTable'); }">
+                                <span class="htmx-indicator" id="loading-indicator-{{.ID}}">
+                                    <svg class="animate-spin h-4 w-4 text-yellow-600 inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                </span>
+                                Release
+                            </button>
+                            {{end}}
+                            <button class="text-red-600 hover:text-red-900"
+                                    hx-delete="/api/reservations/{{.ID}}"
+                                    hx-confirm="Are you sure you want to delete this reservation?"
+                                    hx-swap="none"
+                                    hx-trigger="click"
+                                    hx-indicator="#loading-indicator-delete-{{.ID}}"
+                                    hx-on::after-request="if(event.detail.successful) { htmx.trigger('#reservation-table-body', 'refreshTable'); }">
+                                <span class="htmx-indicator" id="loading-indicator-delete-{{.ID}}">
+                                    <svg class="animate-spin h-4 w-4 text-red-600 inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                </span>
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="4" class="px-6 py-4 text-center text-gray-500">No reservations found</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+    // Chart initialization - minimal JavaScript to enhance the server-rendered content
+    document.addEventListener('DOMContentLoaded', function() {
+        // Event listener for table refresh
+        htmx.on('#reservation-table-body', 'refreshTable', function() {
+            htmx.ajax('GET', '/admin/reservations', '#reservation-table-body');
+            // Also refresh stats
+            htmx.ajax('GET', '/api/stats', '#total-count', {target: '#total-count', select: '#total-count'});
+            htmx.ajax('GET', '/api/stats', '#committed-count', {target: '#committed-count', select: '#committed-count'});
+            htmx.ajax('GET', '/api/stats', '#reserved-count', {target: '#reserved-count', select: '#reserved-count'});
+            
+            // Refresh charts
+            loadChartData();
+        });
+
+        // Function to load chart data
+        function loadChartData() {
+            fetch('/api/stats')
+                .then(response => response.json())
+                .then(data => {
+                    updateActivityChart(data.dailyActivity);
+                    updateEnvironmentChart(data.topEnvironments);
+                })
+                .catch(error => console.error('Error loading chart data:', error));
+        }
+
+        // Function to update activity chart
+        function updateActivityChart(activities) {
+            const ctx = document.getElementById('activityChart').getContext('2d');
+            
+            // Extract data for chart
+            const labels = activities.map(activity => activity.date);
+            const reservedData = activities.map(activity => activity.reserved);
+            const committedData = activities.map(activity => activity.committed);
+            
+            // Create chart
+            if (window.activityChart) {
+                window.activityChart.destroy();
+            }
+            
+            window.activityChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Reserved',
+                            data: reservedData,
+                            backgroundColor: '#FCD34D', // yellow-300
+                            borderWidth: 0
+                        },
+                        {
+                            label: 'Committed',
+                            data: committedData,
+                            backgroundColor: '#10B981', // green-500
+                            borderWidth: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+
+        // Function to update environment chart
+        function updateEnvironmentChart(environments) {
+            const ctx = document.getElementById('environmentChart').getContext('2d');
+            
+            // Extract data for chart
+            const labels = environments.map(env => env.environment);
+            const data = environments.map(env => env.count);
+            const backgroundColors = [
+                '#3B82F6', // blue-500
+                '#10B981', // green-500
+                '#6366F1', // indigo-500
+                '#F59E0B', // amber-500 
+                '#EF4444'  // red-500
+            ];
+            
+            // Create chart
+            if (window.environmentChart) {
+                window.environmentChart.destroy();
+            }
+            
+            window.environmentChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: backgroundColors,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%'
+                }
+            });
+        }
+
+        // Initial load
+        loadChartData();
+    });
+</script>
+{{end}}

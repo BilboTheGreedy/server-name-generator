@@ -1,0 +1,310 @@
+{{template "admin" .}}
+
+{{define "title"}}Generate Server Name{{end}}
+
+{{define "content"}}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold mb-6">Generate New Server Name</h1>
+    
+    <div class="bg-white rounded-lg shadow overflow-hidden mb-8">
+        <div class="p-6 border-b">
+            <h2 class="text-lg font-semibold mb-4">Name Preview</h2>
+            <div class="bg-gray-100 rounded-lg p-4 text-center font-mono text-xl mb-4 grid grid-cols-7 gap-1" id="name-preview-container">
+                <div class="bg-white rounded px-2 py-1" id="preview-unitcode" data-default="SRV" data-length="3" style="grid-column: span 3 / span 3;">SRV</div>
+                <div class="bg-white rounded px-2 py-1" id="preview-type" data-default="V" data-length="1">V</div>
+                <div class="bg-white rounded px-2 py-1" id="preview-provider" data-default="X" data-length="1">X</div>
+                <div class="bg-white rounded px-2 py-1" id="preview-region" data-default="GLBL" data-length="4" style="grid-column: span 4 / span 4;">GLBL</div>
+                <div class="bg-white rounded px-2 py-1" id="preview-env" data-default="P" data-length="1">P</div>
+                <div class="bg-white rounded px-2 py-1" id="preview-function" data-default="SV" data-length="2" style="grid-column: span 2 / span 2;">SV</div>
+                <div class="bg-white rounded px-2 py-1" id="preview-sequence" data-default="001" data-length="3" style="grid-column: span 2 / span 2;">001</div>
+            </div>
+            <div class="grid grid-cols-7 gap-1 text-xs text-gray-500 text-center mb-4">
+                <div style="grid-column: span 3 / span 3;">Unit Code</div>
+                <div>Type</div>
+                <div>Prov</div>
+                <div style="grid-column: span 4 / span 4;">Region</div>
+                <div>Env</div>
+                <div style="grid-column: span 2 / span 2;">Function</div>
+                <div style="grid-column: span 2 / span 2;">Sequence</div>
+            </div>
+        </div>
+        
+        <div class="p-6">
+            <form id="reservationForm" 
+                  hx-post="/api/reserve" 
+                  hx-headers='{"Content-Type": "application/json"}'
+                  hx-swap="none"
+                  hx-on::after-request="document.getElementById('reservationForm').reset(); 
+                                         if(event.detail.successful) { 
+                                           let response = JSON.parse(event.detail.xhr.response);
+                                           document.getElementById('resultServerName').textContent = response.serverName;
+                                           document.getElementById('resultReservationId').textContent = response.reservationId;
+                                           document.getElementById('reservationResult').classList.remove('hidden');
+                                           document.getElementById('commitReservationBtn').setAttribute('data-id', response.reservationId);
+                                         } else {
+                                           showNotification('Error: ' + (event.detail.xhr.status === 0 ? 'Connection failed' : event.detail.xhr.statusText), 'error');
+                                         }">
+            
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div>
+                        <label for="unitCode" class="block text-sm font-medium text-gray-700 mb-1">
+                            Unit Code <span class="text-xs text-gray-500">(max 3 chars)</span>
+                        </label>
+                        <input type="text" id="unitCode" name="unitCode" maxlength="3" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                               placeholder="e.g., SRV"
+                               data-preview="preview-unitcode"
+                               hx-on:keyup="updatePreview(this)"
+                               hx-on:change="updatePreview(this)">
+                        <div class="text-xs text-gray-500 mt-1"><span id="unitCodeCount">0</span>/3</div>
+                    </div>
+                    
+                    <div>
+                        <label for="type" class="block text-sm font-medium text-gray-700 mb-1">
+                            Type <span class="text-xs text-gray-500">(max 1 char)</span>
+                        </label>
+                        <input type="text" id="type" name="type" maxlength="1" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                               placeholder="e.g., V"
+                               data-preview="preview-type"
+                               hx-on:keyup="updatePreview(this)"
+                               hx-on:change="updatePreview(this)">
+                        <div class="text-xs text-gray-500 mt-1"><span id="typeCount">0</span>/1</div>
+                    </div>
+                    
+                    <div>
+                        <label for="provider" class="block text-sm font-medium text-gray-700 mb-1">
+                            Provider <span class="text-xs text-gray-500">(max 1 char)</span>
+                        </label>
+                        <input type="text" id="provider" name="provider" maxlength="1" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                               placeholder="e.g., A"
+                               data-preview="preview-provider"
+                               hx-on:keyup="updatePreview(this)"
+                               hx-on:change="updatePreview(this)">
+                        <div class="text-xs text-gray-500 mt-1"><span id="providerCount">0</span>/1</div>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div>
+                        <label for="region" class="block text-sm font-medium text-gray-700 mb-1">
+                            Region <span class="text-xs text-gray-500">(max 4 chars)</span>
+                        </label>
+                        <input type="text" id="region" name="region" maxlength="4" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                               placeholder="e.g., USEA"
+                               data-preview="preview-region"
+                               hx-on:keyup="updatePreview(this)"
+                               hx-on:change="updatePreview(this)">
+                        <div class="text-xs text-gray-500 mt-1"><span id="regionCount">0</span>/4</div>
+                    </div>
+                    
+                    <div>
+                        <label for="environment" class="block text-sm font-medium text-gray-700 mb-1">
+                            Environment <span class="text-xs text-gray-500">(max 1 char)</span>
+                        </label>
+                        <input type="text" id="environment" name="environment" maxlength="1" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                               placeholder="e.g., P"
+                               data-preview="preview-env"
+                               hx-on:keyup="updatePreview(this)"
+                               hx-on:change="updatePreview(this)">
+                        <div class="text-xs text-gray-500 mt-1"><span id="environmentCount">0</span>/1</div>
+                    </div>
+                    
+                    <div>
+                        <label for="function" class="block text-sm font-medium text-gray-700 mb-1">
+                            Function <span class="text-xs text-gray-500">(max 2 chars)</span>
+                        </label>
+                        <input type="text" id="function" name="function" maxlength="2" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                               placeholder="e.g., WB"
+                               data-preview="preview-function"
+                               hx-on:keyup="updatePreview(this)"
+                               hx-on:change="updatePreview(this)">
+                        <div class="text-xs text-gray-500 mt-1"><span id="functionCount">0</span>/2</div>
+                    </div>
+                </div>
+                
+                <div class="flex flex-wrap gap-2">
+                    <button type="submit" 
+                            class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded shadow"
+                            hx-indicator="#loading-indicator">
+                        <span class="htmx-indicator" id="loading-indicator">
+                            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </span>
+                        Generate Name
+                    </button>
+                    
+                    <button type="reset" 
+                            class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 px-4 rounded shadow"
+                            hx-on:click="resetForm()">
+                        Reset
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Reservation Result -->
+    <div id="reservationResult" class="bg-white rounded-lg shadow overflow-hidden hidden">
+        <div class="p-6 bg-gray-50 border-b">
+            <h2 class="text-lg font-semibold">Reservation Result</h2>
+        </div>
+        <div class="p-6">
+            <div class="flex flex-wrap justify-between items-start gap-4">
+                <div>
+                    <p class="mb-2">
+                        <span class="text-gray-600 font-medium">Server Name:</span> 
+                        <span id="resultServerName" class="font-mono text-lg">SRVVXGLBLPSV001</span>
+                    </p>
+                    <p class="text-sm text-gray-500">
+                        <span class="font-medium">Reservation ID:</span> 
+                        <span id="resultReservationId">00000000-0000-0000-0000-000000000000</span>
+                    </p>
+                </div>
+                <div>
+                    <button id="commitReservationBtn" 
+                            class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded shadow"
+                            data-id=""
+                            hx-post="/api/commit"
+                            hx-headers='{"Content-Type": "application/json"}'
+                            hx-vals='{"reservationId": ""}'
+                            hx-swap="none"
+                            hx-indicator="#commit-indicator"
+                            hx-on:htmx:before-request="this.setAttribute('hx-vals', JSON.stringify({reservationId: this.getAttribute('data-id')}))"
+                            hx-on:htmx:after-request="if(event.detail.successful) { 
+                                                        showNotification('Reservation committed successfully', 'success');
+                                                        document.getElementById('reservationResult').classList.add('hidden');
+                                                     } else {
+                                                        showNotification('Error committing reservation', 'error');
+                                                     }">
+                        <span class="htmx-indicator" id="commit-indicator">
+                            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </span>
+                        Commit This Name
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Notification -->
+    <div id="notification" class="fixed top-4 right-4 max-w-sm w-full bg-white shadow-lg rounded-lg pointer-events-auto hidden transform transition-all duration-300 ease-in-out z-50">
+      <div class="p-4">
+        <div class="flex items-start">
+          <div id="notification-icon" class="flex-shrink-0">
+            <!-- Icon will be inserted here by JS -->
+          </div>
+          <div class="ml-3 w-0 flex-1 pt-0.5">
+            <p id="notification-message" class="text-sm font-medium text-gray-900"></p>
+          </div>
+          <div class="ml-4 flex-shrink-0 flex">
+            <button type="button" class="bg-white rounded-md inline-flex text-gray-400 hover:text-gray-500" onclick="document.getElementById('notification').classList.add('hidden')">
+              <span class="sr-only">Close</span>
+              <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+</div>
+
+<script>
+    function updatePreview(input) {
+        const previewId = input.dataset.preview;
+        const previewElement = document.getElementById(previewId);
+        
+        if (!previewElement) return;
+        
+        const maxLength = parseInt(previewElement.dataset.length) || 1;
+        const defaultValue = previewElement.dataset.default || '';
+        
+        // Update character counter
+        const countElement = document.getElementById(input.id + 'Count');
+        if (countElement) {
+            countElement.textContent = input.value.length;
+        }
+        
+        // Update preview 
+        if (input.value) {
+            previewElement.textContent = input.value.toUpperCase();
+            previewElement.classList.add('bg-blue-50', 'text-blue-600');
+            previewElement.classList.remove('bg-white', 'text-gray-500');
+        } else {
+            previewElement.textContent = defaultValue;
+            previewElement.classList.remove('bg-blue-50', 'text-blue-600');
+            previewElement.classList.add('bg-white', 'text-gray-500');
+        }
+    }
+    
+    function resetForm() {
+        // Reset preview elements to defaults
+        document.querySelectorAll('#name-preview-container [id^="preview-"]').forEach(element => {
+            element.textContent = element.dataset.default || '';
+            element.classList.remove('bg-blue-50', 'text-blue-600');
+            element.classList.add('bg-white', 'text-gray-500');
+        });
+        
+        // Reset character counters 
+        document.querySelectorAll('[id$="Count"]').forEach(element => {
+            element.textContent = '0';
+        });
+        
+        // Hide reservation result
+        document.getElementById('reservationResult').classList.add('hidden');
+    }
+    
+    function showNotification(message, type) {
+        const notification = document.getElementById('notification');
+        const notificationMessage = document.getElementById('notification-message');
+        const notificationIcon = document.getElementById('notification-icon');
+        
+        // Set message
+        notificationMessage.textContent = message;
+        
+        // Set icon and color based on type
+        if (type === 'success') {
+            notificationIcon.innerHTML = '<svg class="h-6 w-6 text-green-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
+            notification.classList.add('bg-green-50');
+            notification.classList.remove('bg-red-50', 'bg-yellow-50');
+        } else if (type === 'error') {
+            notificationIcon.innerHTML = '<svg class="h-6 w-6 text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
+            notification.classList.add('bg-red-50');
+            notification.classList.remove('bg-green-50', 'bg-yellow-50');
+        } else {
+            notificationIcon.innerHTML = '<svg class="h-6 w-6 text-yellow-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>';
+            notification.classList.add('bg-yellow-50');
+            notification.classList.remove('bg-green-50', 'bg-red-50');
+        }
+        
+        // Show notification
+        notification.classList.remove('hidden');
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            notification.classList.add('hidden');
+        }, 5000);
+    }
+    
+    // Initialize input fields when the page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        // Set initial character counters
+        document.querySelectorAll('input[data-preview]').forEach(input => {
+            const countElement = document.getElementById(input.id + 'Count');
+            if (countElement) {
+                countElement.textContent = input.value.length;
+            }
+        });
+    });
+</script>
+{{end}}
